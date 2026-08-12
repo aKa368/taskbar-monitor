@@ -14,12 +14,20 @@ public sealed class GpuMonitor : IDisposable
             foreach (string instance in category.GetInstanceNames())
                 _counters.Add(new PerformanceCounter("GPU Engine", "Utilization Percentage", instance, true));
         }
-        catch { Dispose(); }
+        catch (Exception ex)
+        {
+            Diagnostics.ReportReaderFailure("gpu.init", ex);
+            Dispose();
+        }
     }
     public double Sample()
     {
         double total = 0;
-        foreach (var counter in _counters) { try { total += counter.NextValue(); } catch { } }
+        foreach (var counter in _counters)
+        {
+            try { total += counter.NextValue(); }
+            catch (Exception ex) { Diagnostics.ReportReaderFailure("gpu.sample", ex); }
+        }
         return double.IsFinite(total) ? Math.Clamp(total, 0, 100) : 0;
     }
     public void Dispose() { foreach (var counter in _counters) counter.Dispose(); _counters.Clear(); }
