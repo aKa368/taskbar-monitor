@@ -1,0 +1,38 @@
+﻿{
+  "metrics": {
+    "cpu": true,
+    "ram": true,
+    "network": true,
+    "disk": false,
+    "gpu": true,
+    "temperature": true
+  },
+  "agents": {
+    "commandcode": true,
+    "opencode": true,
+    "codex": false,
+    "antigravity": false,
+    "claude": false
+  },
+  "colors": {
+    "cpu": "#007ACC",
+    "ram": "#28A745",
+    "network": "#17A2B8",
+    "commandcode": "#6F42C1",
+    "opencode": "#FD7E14",
+    "codex": "#10A37F",
+    "antigravity": "#4285F4",
+    "claude": "#D97706"
+  },
+  "updateIntervalSeconds": 1,
+  "placement": "Auto",
+  "preferredWidth": 560,
+  "position": "Center",
+  "layout": "Grid",
+  "density": "Compact",
+  "showLabels": true,
+  "showResetCountdown": true,
+  "fontFamily": "Sarasa Fixed SC",
+  "fontScale": 1.0,
+  "autostart": false
+}

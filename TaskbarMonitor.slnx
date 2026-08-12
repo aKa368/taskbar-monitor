@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/TaskbarMonitor.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/LayoutTests/LayoutTests.csproj" />
+    <Project Path="tests/PaletteTests/PaletteTests.csproj" />
+  </Folder>
+</Solution>
