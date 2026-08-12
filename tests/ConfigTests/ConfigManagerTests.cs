@@ -142,9 +142,9 @@ public class ConfigManagerTests : IDisposable
           ""preferredWidth"": 520,
           ""updateIntervalSeconds"": 2
         }";
-        await File.WriteAllTextAsync(configPath, newJson);
+        await File.WriteAllTextAsync(configPath, newJson, TestContext.Current.CancellationToken);
 
-        var completedTask = await Task.WhenAny(tcs.Task, Task.Delay(3000));
+        var completedTask = await Task.WhenAny(tcs.Task, Task.Delay(3000, TestContext.Current.CancellationToken));
         Assert.Equal(tcs.Task, completedTask);
 
         var result = await tcs.Task;
@@ -220,5 +220,52 @@ public class ConfigManagerTests : IDisposable
 
         Assert.True(manager.Config.Metrics.Temperature);
         Assert.Equal("Right", manager.Config.Position);
+    }
+
+    [Fact]
+    public void SaveIsAtomicAndKeepsBackup()
+    {
+        string configPath = Path.Combine(_tempDirectory, "config_atomic.json");
+        using (var manager = new ConfigManager(configPath))
+        {
+            manager.Save(new ConfigData { PreferredWidth = 400 });
+        }
+
+        // First save: file exists, no temp left behind, no backup yet.
+        Assert.True(File.Exists(configPath));
+        Assert.False(File.Exists(configPath + ".tmp"));
+
+        using (var manager = new ConfigManager(configPath))
+        {
+            manager.Save(new ConfigData { PreferredWidth = 500 });
+        }
+
+        // Second save: previous good content is retained as .bak; no temp left.
+        Assert.True(File.Exists(configPath));
+        Assert.True(File.Exists(configPath + ".bak"));
+        Assert.False(File.Exists(configPath + ".tmp"));
+
+        // .bak holds the pre-second-save content.
+        using var reader = new StreamReader(configPath + ".bak");
+        string backupJson = reader.ReadToEnd();
+        Assert.Contains("\"preferredWidth\": 400", backupJson);
+    }
+
+    [Fact]
+    public void CorruptActiveFileRecoversFromBackup()
+    {
+        string configPath = Path.Combine(_tempDirectory, "config_backup_recovery.json");
+        using (var manager = new ConfigManager(configPath))
+        {
+            manager.Save(new ConfigData { PreferredWidth = 440 });
+            manager.Save(new ConfigData { PreferredWidth = 480 });
+        }
+
+        // Corrupt the active file; the .bak from the previous save is intact.
+        File.WriteAllText(configPath, "{ broken json !!!");
+
+        using var manager2 = new ConfigManager(configPath);
+
+        Assert.Equal(440, manager2.Config.PreferredWidth);
     }
 }

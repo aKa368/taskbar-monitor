@@ -140,7 +140,7 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
 
             try
             {
-                    _network = new NetworkMonitor();
+                _network = new NetworkMonitor();
                 readers["netUp"] = () => _network.SampleCached().SentBytesPerSecond / 1024.0;
                 readers["netDown"] = () => _network.SampleCached().ReceivedBytesPerSecond / 1024.0;
             }
@@ -167,7 +167,7 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
 
             try
             {
-                    var gpu = new GpuMonitor();
+                var gpu = new GpuMonitor();
                 _disposables.Add(gpu);
                 var gpuReader = new ThrottledMetricReader(gpu.Sample, TimeSpan.FromSeconds(5));
                 readers["gpu"] = gpuReader.Read;

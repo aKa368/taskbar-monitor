@@ -72,6 +72,43 @@ public sealed class NetworkDownHandler : HttpMessageHandler
         => throw new HttpRequestException("simulated network failure (no connection)");
 }
 
+/// <summary>Responds after a configurable delay. Cancellation can be honored or
+/// ignored so shutdown tests can assert both "waits" and "does not block".</summary>
+public sealed class SlowHttpHandler : HttpMessageHandler
+{
+    private readonly TimeSpan _delay;
+    private readonly (int Status, string Body) _response;
+    private readonly bool _honorCancellation;
+
+    public SlowHttpHandler(TimeSpan delay, (int Status, string Body) response, bool honorCancellation = true)
+    {
+        _delay = delay;
+        _response = response;
+        _honorCancellation = honorCancellation;
+    }
+
+    public TaskCompletionSource FirstRequestStarted { get; } =
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    private int _completedRequests;
+    public int CompletedRequests => _completedRequests;
+
+    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        FirstRequestStarted.TrySetResult();
+        if (_honorCancellation)
+            await Task.Delay(_delay, cancellationToken).ConfigureAwait(false);
+        else
+            await Task.Delay(_delay).ConfigureAwait(false);
+        Interlocked.Increment(ref _completedRequests);
+        return new HttpResponseMessage((HttpStatusCode)_response.Status)
+        {
+            Content = new StringContent(_response.Body, Encoding.UTF8, "application/json"),
+            RequestMessage = request,
+        };
+    }
+}
+
 /// <summary>Builds in-memory / temp-file SQLite databases matching the production schemas.</summary>
 public static class TestDb
 {

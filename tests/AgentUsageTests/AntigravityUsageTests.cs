@@ -109,7 +109,7 @@ public sealed class AntigravityUsageTests
             .On("POST", "/v1internal:retrieveUserQuotaSummary", (200, QuotaSummaryPayload));
         using var usage = new AntigravityUsage(stub, credentialReader: () => CredentialJson());
 
-        var data = await usage.FetchAsync();
+        var data = await usage.FetchAsync(ct: TestContext.Current.CancellationToken);
         Assert.NotNull(data);
         Assert.Null(data!.Error);
         Assert.Equal(50, data.UsedPercent5h!.Value, 3);
@@ -127,7 +127,7 @@ public sealed class AntigravityUsageTests
             .On("POST", "/v1internal:fetchAvailableModels", (200, AvailableModelsPayload));
         using var usage = new AntigravityUsage(stub, credentialReader: () => CredentialJson());
 
-        var data = await usage.FetchAsync();
+        var data = await usage.FetchAsync(ct: TestContext.Current.CancellationToken);
         Assert.NotNull(data);
         Assert.Null(data!.Error);
         Assert.Equal(15, data.UsedPercent5h!.Value, 3);
@@ -141,7 +141,7 @@ public sealed class AntigravityUsageTests
             .On("POST", "/v1internal:retrieveUserQuotaSummary", (200, QuotaSummaryPayload));
         using var usage = new AntigravityUsage(stub, credentialReader: () => CredentialJson(expired: true));
 
-        var data = await usage.FetchAsync();
+        var data = await usage.FetchAsync(ct: TestContext.Current.CancellationToken);
 
         Assert.NotNull(data);
         Assert.Contains("expired", data!.Error);
@@ -152,7 +152,7 @@ public sealed class AntigravityUsageTests
     public async Task MissingCredentialReturnsFailureWithoutThrowing()
     {
         using var usage = new AntigravityUsage(credentialReader: () => null);
-        var data = await usage.FetchAsync();
+        var data = await usage.FetchAsync(ct: TestContext.Current.CancellationToken);
         Assert.NotNull(data);
         Assert.Contains("credential", data!.Error);
     }
@@ -161,7 +161,7 @@ public sealed class AntigravityUsageTests
     public async Task MalformedCredentialReturnsFailureWithoutThrowing()
     {
         using var usage = new AntigravityUsage(credentialReader: () => "not json at all");
-        var data = await usage.FetchAsync();
+        var data = await usage.FetchAsync(ct: TestContext.Current.CancellationToken);
         Assert.NotNull(data);
         Assert.NotNull(data!.Error);
     }
@@ -170,7 +170,7 @@ public sealed class AntigravityUsageTests
     public async Task TokenNeverLeaksIntoErrorOnNetworkFailure()
     {
         using var usage = new AntigravityUsage(new NetworkDownHandler(), credentialReader: () => CredentialJson());
-        var data = await usage.FetchAsync();
+        var data = await usage.FetchAsync(ct: TestContext.Current.CancellationToken);
         Assert.NotNull(data);
         Assert.NotNull(data!.Error);
         AssertNoSecret.DoesNotContain(data.Error, FakeAccess);

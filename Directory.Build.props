@@ -1,0 +1,6 @@
+<Project>
+  <PropertyGroup>
+    <!-- Reproducible release restores: packages.lock.json is committed. -->
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+</Project>
