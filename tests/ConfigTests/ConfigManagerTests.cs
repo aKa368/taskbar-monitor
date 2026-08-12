@@ -33,6 +33,17 @@ public class ConfigManagerTests : IDisposable
     }
 
     [Fact]
+    public void DefaultConfigPathUsesPerUserLocalAppData()
+    {
+        string expectedRoot = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "TaskbarMonitor",
+            "Config");
+
+        Assert.Equal(Path.Combine(expectedRoot, "config.json"), ConfigManager.GetDefaultConfigPath());
+    }
+
+    [Fact]
     public void TestDefaultConfigCreation_WhenFileDoesNotExist()
     {
         string configPath = Path.Combine(_tempDirectory, "config.json");

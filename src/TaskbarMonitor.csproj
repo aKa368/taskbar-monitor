@@ -9,6 +9,13 @@
     <UseWindowsForms>true</UseWindowsForms>
     <RootNamespace>TaskbarMonitor</RootNamespace>
     <AssemblyName>TaskbarMonitor</AssemblyName>
+    <Version>1.0.1</Version>
+    <FileVersion>1.0.1.0</FileVersion>
+    <AssemblyVersion>1.0.1.0</AssemblyVersion>
+    <InformationalVersion>1.0.1</InformationalVersion>
+    <Company>aKa368</Company>
+    <Product>TaskbarMonitor</Product>
+    <Description>Windows 11 taskbar system monitor</Description>
   </PropertyGroup>
 
   <ItemGroup>
@@ -17,7 +24,6 @@
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.0" />
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.12" />
     <PackageReference Include="System.Management" Version="10.0.0" />
-    <PackageReference Include="LibreHardwareMonitorLib" Version="0.9.4" />
   </ItemGroup>
 
   <ItemGroup>

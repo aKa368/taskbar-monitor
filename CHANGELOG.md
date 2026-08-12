@@ -2,6 +2,16 @@
 
 All notable changes to TaskbarMonitor are documented in this file.
 
+## [1.0.1] - 2026-08-12
+
+### Security
+- Removed `LibreHardwareMonitorLib` and its low-level hardware-driver path after Microsoft Defender identified the bundled WinRing0 driver as `VulnerableDriver:WinNT/Winring0`.
+- The release no longer ships or loads a `.sys` driver. GPU temperature is unavailable (`--°C`) unless a future user-mode Windows API provides it.
+- Added explicit product/version metadata and a release installer signing requirement; an unsigned installer may still receive a SmartScreen reputation prompt until an Authenticode certificate is used.
+
+### Changed
+- Added a standard per-user, self-contained Inno Setup installer with shortcuts and uninstaller; runtime config now lives at `%LocalAppData%\TaskbarMonitor\Config\config.json` so it remains writable after installation.
+
 ## [1.0.0] - 2026-08-12
 
 ### Added

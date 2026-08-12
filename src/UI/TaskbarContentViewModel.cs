@@ -29,7 +29,6 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
     private MetricSampler? _sampler;
     private NetworkMonitor? _network;
     private TemperatureMonitor? _temperature;
-    private GpuTemperatureMonitor? _gpuTemperature;
     private UsagePoller? _poller;
     private string _fontFamily = "Sarasa Fixed SC";
     private string _networkRateText = "↑ -- ↓ --";
@@ -184,14 +183,10 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
             }
             catch { readers["temperature"] = () => double.NaN; }
 
-            try
-            {
-                _gpuTemperature = new GpuTemperatureMonitor();
-                _disposables.Add(_gpuTemperature);
-                var gpuTemperatureReader = new ThrottledMetricReader(_gpuTemperature.SampleCelsius, TimeSpan.FromSeconds(10));
-                readers["gpuTemperature"] = gpuTemperatureReader.Read;
-            }
-            catch { readers["gpuTemperature"] = () => double.NaN; }
+            // GPU thermal libraries often need privileged driver access. This
+            // user-mode widget intentionally does not load hardware drivers;
+            // lack of a trusted sensor is shown as --°C.
+            readers["gpuTemperature"] = () => double.NaN;
 
             // Native counters and adapter enumeration are already cached by the
             // UI; a two-second sampling cadence keeps the widget responsive
