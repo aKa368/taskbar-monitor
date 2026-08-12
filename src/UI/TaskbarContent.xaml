@@ -1,0 +1,121 @@
+<UserControl x:Class="TaskbarMonitor.UI.TaskbarContent"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:ui="clr-namespace:TaskbarMonitor.UI"
+             mc:Ignorable="d" d:DesignHeight="48" d:DesignWidth="560">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+        <ui:InvertedBooleanToVisibilityConverter x:Key="InvertedBoolToVis" />
+        <ui:PodTemplateSelector x:Key="PodTemplateSelector" />
+
+        <DataTemplate x:Key="MetricPodTemplate">
+            <Border Background="Transparent" BorderBrush="#33FFFFFF" BorderThickness="1"
+                    CornerRadius="4" Padding="5,1" Margin="0,0,4,0" VerticalAlignment="Center">
+                <TextBlock Text="{Binding ValueText}" Foreground="#EEEEEE"
+                           FontFamily="{Binding DataContext.FontFamily, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                           FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
+            </Border>
+        </DataTemplate>
+
+        <!-- Fixed Grid metric: bounded content prevents a changing value from resizing a column. -->
+        <DataTemplate x:Key="GridMetricPodTemplate">
+            <Border Background="Transparent" BorderBrush="#33FFFFFF" BorderThickness="1"
+                    CornerRadius="4" Padding="4,1" Margin="0" VerticalAlignment="Center" ClipToBounds="True">
+                <TextBlock Text="{Binding ValueText}" Foreground="#EEEEEE"
+                           FontFamily="{Binding DataContext.FontFamily, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                           FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
+            </Border>
+        </DataTemplate>
+
+        <!-- The single Network pod sits below GPU, immediately right of RAM. -->
+        <DataTemplate x:Key="NetworkRateTemplate">
+            <Border Background="Transparent" BorderBrush="#33FFFFFF" BorderThickness="1"
+                    CornerRadius="4" Padding="3,1" Margin="0" VerticalAlignment="Center"
+                    Width="128" ClipToBounds="True">
+                <TextBlock Text="{Binding}" Foreground="#EEEEEE"
+                           FontFamily="{Binding DataContext.FontFamily, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                           FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
+            </Border>
+        </DataTemplate>
+
+        <!-- Fixed Grid agent: a Grid (not StackPanel) gives the changing usage text
+             a bounded remaining column, so it cannot widen its pod. -->
+        <DataTemplate x:Key="GridAgentPodTemplate">
+            <Border Background="Transparent" BorderBrush="#33FFFFFF" BorderThickness="1"
+                    CornerRadius="4" Padding="3,1" Margin="0" VerticalAlignment="Center" ClipToBounds="True">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Background="{Binding ColorHex}" CornerRadius="3" Padding="3,1" Margin="0,0,3,0">
+                        <TextBlock Text="{Binding Label}" Foreground="White" FontSize="9" FontWeight="Bold" />
+                    </Border>
+                    <TextBlock Grid.Column="1" Text="{Binding ValueText}" Foreground="#EEEEEE"
+                               FontSize="9" FontWeight="SemiBold" VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
+                </Grid>
+            </Border>
+        </DataTemplate>
+
+        <DataTemplate x:Key="AgentPodTemplate">
+            <Border Background="Transparent" BorderBrush="#33FFFFFF" BorderThickness="1"
+                    CornerRadius="4" Padding="4,1" Margin="0,0,4,0" VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Background="{Binding ColorHex}" CornerRadius="3" Padding="3,1" Margin="0,0,3,0">
+                        <TextBlock Text="{Binding Label}" Foreground="White" FontSize="9" FontWeight="Bold" />
+                    </Border>
+                    <TextBlock Text="{Binding ValueText}" Foreground="#EEEEEE" FontSize="9" FontWeight="SemiBold" />
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <!-- Transparent root lets Explorer's taskbar acrylic/transparency show through. -->
+    <Grid Background="Transparent" SnapsToDevicePixels="True" UseLayoutRounding="True">
+        <!-- Normal presets -->
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Center"
+                    Visibility="{Binding IsSingleRow, Converter={StaticResource BoolToVis}}">
+            <ItemsControl ItemsSource="{Binding Pods}" ItemTemplateSelector="{StaticResource PodTemplateSelector}">
+                <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+            </ItemsControl>
+        </StackPanel>
+
+        <!-- TwoLine preset -->
+        <StackPanel Orientation="Vertical" VerticalAlignment="Center"
+                    Visibility="{Binding IsTwoRow, Converter={StaticResource BoolToVis}}">
+            <ItemsControl ItemsSource="{Binding Rows[0]}" ItemTemplateSelector="{StaticResource PodTemplateSelector}">
+                <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+            </ItemsControl>
+            <ItemsControl ItemsSource="{Binding Rows[1]}" ItemTemplateSelector="{StaticResource PodTemplateSelector}">
+                <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+            </ItemsControl>
+        </StackPanel>
+
+        <!-- Grid uses a fixed 3 × 2 matrix. All cells have a stable maximum width;
+             truncation happens inside the cell rather than moving a neighbor. -->
+        <Grid Visibility="{Binding IsGrid, Converter={StaticResource BoolToVis}}"
+              Margin="1,0" VerticalAlignment="Center">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="128" />
+                <ColumnDefinition Width="128" />
+                <ColumnDefinition Width="128" />
+            </Grid.ColumnDefinitions>
+            <ContentControl Grid.Row="0" Grid.Column="0" Content="{Binding GridCpu}" ContentTemplate="{StaticResource GridMetricPodTemplate}" />
+            <ContentControl Grid.Row="1" Grid.Column="0" Content="{Binding GridRam}" ContentTemplate="{StaticResource GridMetricPodTemplate}" />
+            <ContentControl Grid.Row="0" Grid.Column="1" Content="{Binding GridGpu}" ContentTemplate="{StaticResource GridMetricPodTemplate}" />
+            <ContentControl Grid.Row="1" Grid.Column="1" Content="{Binding NetworkRateText}"
+                            ContentTemplate="{StaticResource NetworkRateTemplate}" />
+            <ContentControl Grid.Row="0" Grid.Column="2" Content="{Binding GridCodex}" ContentTemplate="{StaticResource GridAgentPodTemplate}" />
+            <ContentControl Grid.Row="1" Grid.Column="2" Content="{Binding GridProvider}" ContentTemplate="{StaticResource GridAgentPodTemplate}" />
+        </Grid>
+    </Grid>
+</UserControl>

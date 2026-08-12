@@ -1,0 +1,42 @@
+# Build output, distributable artifacts, and IDE state
+[Bb]in/
+[Oo]bj/
+dist/
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Test artifacts and local task output
+TestResults/
+coverage/
+jobs/*/log.txt
+jobs/*/verify_out.txt
+
+# Internal work artifacts: remain local, never publish
+.hermes/
+jobs/
+PLAN.md
+RESEARCH_USAGE.md
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+*.pfx
+*.p12
+*.pem
+*.key
+secrets.json
+appsettings.Local.json
+
+# Screenshots can capture desktop content; keep them local unless separately sanitized.
+docs/screenshots/
+
+# Historical local research; README is the maintained public documentation.
+RESEARCH.md
+
+# OS files
+Thumbs.db
+Desktop.ini
