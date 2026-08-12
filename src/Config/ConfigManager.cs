@@ -167,8 +167,12 @@ public class ConfigManager : INotifyPropertyChanged, IDisposable
 
     public static string GetDefaultConfigPath()
     {
-        string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-        string configDir = Path.Combine(baseDir, "Config");
+        // Installed applications cannot safely write beside their executable in
+        // Program Files. Keep per-user settings in LocalAppData instead.
+        string configDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "TaskbarMonitor",
+            "Config");
         return Path.Combine(configDir, "config.json");
     }
 

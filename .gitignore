@@ -1,7 +1,10 @@
 # Build output, distributable artifacts, and IDE state
 [Bb]in/
 [Oo]bj/
+# Local release staging and generated install packages
 dist/
+release-*/
+
 .vs/
 *.user
 *.suo

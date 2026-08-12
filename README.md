@@ -7,7 +7,7 @@ A compact **Windows 11 taskbar widget** for local system metrics and optional AI
 ## What it shows
 
 - CPU and RAM utilization
-- GPU utilization and best-effort CPU/GPU temperature
+- GPU utilization and best-effort CPU temperature. GPU temperature is deliberately shown as `--°C` when Windows does not expose it through a user-mode API; this release does not load kernel/hardware drivers.
 - One compact network cell: `↑512K ↓1.5M`
 - Optional local usage summaries for CommandCode and OpenCode
 - Optional quota usage for ChatGPT/Codex, Antigravity, and Claude Code
@@ -61,11 +61,13 @@ These usage endpoints are provider-owned services and may change independently o
 
 ## Configuration
 
-At runtime the configuration lives beside the executable:
+At runtime per-user configuration is stored outside the install directory:
 
 ```text
-Config/config.json
+%LocalAppData%\TaskbarMonitor\Config\config.json
 ```
+
+This allows tray settings to save normally when TaskbarMonitor is installed under `Program Files` or another protected directory. The shipped `Config/config.json` is only a first-run template.
 
 Example (safe defaults):
 
@@ -149,6 +151,24 @@ dotnet publish src\TaskbarMonitor.csproj `
   --self-contained false `
   --output dist\win-x64
 ```
+
+### Create the Windows installer
+
+The supported end-user artifact is the Inno Setup installer, not an `.exe` launched from a ZIP. It installs a **self-contained** `win-x64` payload per user, creates shortcuts and an uninstaller, and does not require a separately installed .NET runtime:
+
+```powershell
+# Publish the complete payload first.
+dotnet publish src\TaskbarMonitor.csproj `
+  --configuration Release `
+  --runtime win-x64 `
+  --self-contained true `
+  --output release-<version>\staging\TaskbarMonitor
+
+# Compile the reviewed installer script.
+& "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" installer\TaskbarMonitor.iss
+```
+
+For public distribution, sign the final installer with a valid Authenticode code-signing certificate and RFC 3161 timestamp. Do not distribute a self-extracting custom launcher or a package that contains kernel drivers.
 
 ## Architecture
 

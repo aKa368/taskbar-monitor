@@ -64,14 +64,6 @@ public sealed class MetricsCoreTests
     }
 
     [Fact]
-    public void GpuTemperatureMonitorReturnsSafeValueWhenSensorIsUnavailable()
-    {
-        using var monitor = new GpuTemperatureMonitor();
-        var value = monitor.SampleCelsius();
-        Assert.InRange(value, 0, 130);
-    }
-
-    [Fact]
     public async Task SamplerStartsAndStops()
     {
         int calls = 0;
