@@ -19,15 +19,17 @@ public sealed class TemperatureMonitor : IDisposable
                 {
                     _counters.Add(new PerformanceCounter(category.CategoryName, "Temperature", instance, readOnly: true));
                 }
-                catch
+                catch (Exception ex)
                 {
                     // One unavailable thermal zone must not disable the others.
+                    Diagnostics.ReportReaderFailure("temperature.zone", ex);
                 }
             }
         }
-        catch
+        catch (Exception ex)
         {
             // The category is not present on every Windows machine.
+            Diagnostics.ReportReaderFailure("temperature.init", ex);
         }
     }
 
@@ -47,7 +49,10 @@ public sealed class TemperatureMonitor : IDisposable
                     count++;
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Diagnostics.ReportReaderFailure("temperature.sample", ex);
+            }
         }
 
         if (count > 0) return total / count;
@@ -72,7 +77,10 @@ public sealed class TemperatureMonitor : IDisposable
                 }
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Diagnostics.ReportReaderFailure("temperature.wmi", ex);
+        }
 
         return count == 0 ? 0 : total / count;
     }

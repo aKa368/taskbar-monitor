@@ -389,7 +389,10 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
                 var hist = _sampler.GetHistory(key);
                 if (hist.Count > 0) return (float)hist[^1];
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Diagnostics.ReportReaderFailure($"sampler.{key}", ex);
+            }
         }
         return float.NaN;
     }
@@ -428,7 +431,8 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
         ConfigManager.Instance.ConfigReloaded -= OnConfigReloaded;
         foreach (var d in _disposables)
         {
-            try { d.Dispose(); } catch { }
+            try { d.Dispose(); }
+            catch (Exception ex) { Diagnostics.ReportReaderFailure("disposable", ex); }
         }
     }
 }
