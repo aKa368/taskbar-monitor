@@ -3,7 +3,10 @@
     <Project Path="src/TaskbarMonitor.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/AgentUsageTests/AgentUsageTests.csproj" />
+    <Project Path="tests/ConfigTests/ConfigTests.csproj" />
     <Project Path="tests/LayoutTests/LayoutTests.csproj" />
+    <Project Path="tests/MetricsTests/MetricsTests.csproj" />
     <Project Path="tests/PaletteTests/PaletteTests.csproj" />
   </Folder>
 </Solution>

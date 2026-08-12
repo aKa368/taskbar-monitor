@@ -2,6 +2,18 @@
 
 All notable changes to TaskbarMonitor are documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- `TaskbarMonitor.slnx` now contains all five test projects (`AgentUsageTests`, `ConfigTests`, `MetricsTests`, `LayoutTests`, `PaletteTests`); running tests via the new solution no longer silently skips suites.
+- `UsagePoller` now performs a graceful shutdown: `DisposeAsync` cancels in-flight HTTP polls via a poller-scoped `CancellationTokenSource` and awaits them before disposing HTTP clients (no more fire-and-forget races at exit).
+- `ConfigManager` writes `config.json` atomically (temp file + `File.Replace`, keeping a `.bak`) and falls back to the last good backup when the active file is corrupt, instead of resetting to defaults.
+
+### Changed
+- Unified test package versions via central package management (`Directory.Packages.props`): all test projects use `Microsoft.NET.Test.Sdk 18.0.1`, `xunit.v3 3.2.2`, and `xunit.runner.visualstudio 3.1.5` (no more v2/v3 mix).
+- All test projects now target `net10.0-windows10.0.26100` and reference the real `TaskbarMonitor` assembly via `InternalsVisibleTo` instead of re-compiling `src` sources.
+- CI now restores with `--locked-mode` (committed `packages.lock.json`), collects code coverage, verifies formatting (`dotnet format --verify-no-changes`), and fails if `.slnx` misses any project present in `.sln`.
+
 ## [1.0.1] - 2026-08-12
 
 ### Security

@@ -153,7 +153,7 @@ public class SettingsPaletteViewModelTests
 
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
-        Assert.True(completed.Wait(TimeSpan.FromSeconds(10)), "Settings window did not finish loading.");
+        Assert.True(completed.Wait(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken), "Settings window did not finish loading.");
         thread.Join();
         Assert.Null(failure);
     }

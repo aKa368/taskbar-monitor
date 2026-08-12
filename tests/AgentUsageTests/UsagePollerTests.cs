@@ -40,7 +40,7 @@ public sealed class UsagePollerTests
                 new UsagePollerOptions { ClaudeEnabled = true },
                 commandCode, openCode, codex, antigravity, claude);
 
-            await poller.RefreshOnceAsync();
+            await poller.RefreshOnceAsync(TestContext.Current.CancellationToken);
 
             var cc = poller.Get(AgentIds.CommandCode);
             Assert.NotNull(cc);
@@ -92,13 +92,13 @@ public sealed class UsagePollerTests
 
             Assert.Null(poller.Get(AgentIds.Codex));
 
-            await poller.RefreshOnceAsync();
+            await poller.RefreshOnceAsync(TestContext.Current.CancellationToken);
             var good = poller.Get(AgentIds.Codex);
             Assert.NotNull(good);
             Assert.Null(good!.Error);
             Assert.Equal(12, good.UsedPercent5h);
 
-            await poller.RefreshOnceAsync();
+            await poller.RefreshOnceAsync(TestContext.Current.CancellationToken);
             var afterFailure = poller.Get(AgentIds.Codex);
             Assert.NotNull(afterFailure);
             Assert.Null(afterFailure!.Error);
@@ -119,7 +119,7 @@ public sealed class UsagePollerTests
         using var antigravity = new AntigravityUsage(new NetworkDownHandler(), credentialReader: () => FakeAntigravityCredential);
 
         using var poller = new UsagePoller(null, commandCode, openCode, codex, antigravity);
-        await poller.RefreshOnceAsync();
+        await poller.RefreshOnceAsync(TestContext.Current.CancellationToken);
 
         Assert.Null(poller.Get(AgentIds.CommandCode));
         Assert.Null(poller.Get(AgentIds.OpenCode));
@@ -141,7 +141,7 @@ public sealed class UsagePollerTests
                 new UsagePollerOptions { CommandCodeEnabled = false, OpenCodeEnabled = false, CodexEnabled = false, AntigravityEnabled = false, ClaudeEnabled = false },
                 commandCode, codex: codex);
 
-            await poller.RefreshOnceAsync();
+            await poller.RefreshOnceAsync(TestContext.Current.CancellationToken);
             Assert.Null(poller.Get(AgentIds.CommandCode));
             Assert.Null(poller.Get(AgentIds.Codex));
             Assert.Equal(0, codexStub.RequestCount);
@@ -163,12 +163,72 @@ public sealed class UsagePollerTests
                 new UsagePollerOptions { CommandCodeEnabled = false, OpenCodeEnabled = false, AntigravityEnabled = false, ClaudeEnabled = false },
                 codex: codex);
 
-            var tasks = Enumerable.Range(0, 8).Select(_ => poller.RefreshOnceAsync());
+            var tasks = Enumerable.Range(0, 8).Select(_ => poller.RefreshOnceAsync(TestContext.Current.CancellationToken));
             await Task.WhenAll(tasks);
 
             var data = poller.Get(AgentIds.Codex);
             Assert.NotNull(data);
             Assert.Equal(12, data!.UsedPercent5h);
+        }
+        finally
+        {
+            TestDb.Delete(authPath);
+        }
+    }
+
+    [Fact]
+    public async Task DisposeAsyncWaitsForInFlightRequests()
+    {
+        string authPath = WriteCodexAuth();
+        // Handler ignores cancellation: DisposeAsync must wait out the delay
+        // instead of tearing down the HttpClient under the in-flight request.
+        var slowHandler = new SlowHttpHandler(TimeSpan.FromMilliseconds(400), (200, CodexPayload), honorCancellation: false);
+        try
+        {
+            using var codex = new CodexUsage(slowHandler, authPath);
+            var poller = new UsagePoller(
+                new UsagePollerOptions { CommandCodeEnabled = false, OpenCodeEnabled = false, AntigravityEnabled = false, ClaudeEnabled = false },
+                codex: codex);
+
+            // Start the timer-driven poll, wait until the request is actually
+            // in flight, then dispose.
+            poller.Start();
+            await slowHandler.FirstRequestStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            await poller.DisposeAsync();
+
+            // DisposeAsync must have waited for the in-flight request to finish;
+            // the handler was still resolving when the poller began shutting down.
+            Assert.True(slowHandler.CompletedRequests >= 1,
+                "DisposeAsync should wait for the in-flight poll before disposing HTTP clients.");
+        }
+        finally
+        {
+            TestDb.Delete(authPath);
+        }
+    }
+
+    [Fact]
+    public async Task DisposeAsyncCancelsPendingWorkAndDoesNotThrow()
+    {
+        string authPath = WriteCodexAuth();
+        // Handler honors cancellation: DisposeAsync cancels and returns quickly,
+        // never blocking forever on a stuck provider.
+        var hangingHandler = new SlowHttpHandler(TimeSpan.FromSeconds(30), (200, CodexPayload), honorCancellation: true);
+        try
+        {
+            using var codex = new CodexUsage(hangingHandler, authPath);
+            var poller = new UsagePoller(
+                new UsagePollerOptions { CommandCodeEnabled = false, OpenCodeEnabled = false, AntigravityEnabled = false, ClaudeEnabled = false },
+                codex: codex);
+
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            poller.Start();
+            await hangingHandler.FirstRequestStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            await poller.DisposeAsync(); // must not block forever or throw
+            stopwatch.Stop();
+
+            Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(10),
+                $"DisposeAsync blocked for {stopwatch.Elapsed.TotalSeconds:F1}s on a cancelable request.");
         }
         finally
         {

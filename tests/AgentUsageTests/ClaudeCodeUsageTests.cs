@@ -57,7 +57,7 @@ public sealed class ClaudeCodeUsageTests
             .On("GET", "/api/oauth/usage", (200, UsagePayload));
         using var usage = new ClaudeCodeUsage(stub, credentialReader: () => "{\"access_token\":\"" + FakeToken + "\"}");
 
-        var data = await usage.FetchAsync();
+        var data = await usage.FetchAsync(ct: TestContext.Current.CancellationToken);
         Assert.NotNull(data);
         Assert.Null(data!.Error);
         Assert.Equal(33, data.UsedPercent5h);
@@ -76,7 +76,7 @@ public sealed class ClaudeCodeUsageTests
             .On("GET", "/api/oauth/usage", (429, "{\"error\":{\"type\":\"rate_limit_error\"}}"));
         using var usage = new ClaudeCodeUsage(stub, credentialReader: () => "{\"access_token\":\"" + FakeToken + "\"}");
 
-        var data = await usage.FetchAsync();
+        var data = await usage.FetchAsync(ct: TestContext.Current.CancellationToken);
         Assert.NotNull(data);
         Assert.Contains("429", data!.Error);
     }
@@ -85,7 +85,7 @@ public sealed class ClaudeCodeUsageTests
     public async Task MissingTokenReturnsFailureWithoutThrowing()
     {
         using var usage = new ClaudeCodeUsage(credentialReader: () => null);
-        var data = await usage.FetchAsync();
+        var data = await usage.FetchAsync(ct: TestContext.Current.CancellationToken);
         Assert.NotNull(data);
         Assert.Contains("no OAuth token", data!.Error);
     }
@@ -94,7 +94,7 @@ public sealed class ClaudeCodeUsageTests
     public async Task TokenNeverLeaksIntoErrorOnNetworkFailure()
     {
         using var usage = new ClaudeCodeUsage(new NetworkDownHandler(), credentialReader: () => "{\"access_token\":\"" + FakeToken + "\"}");
-        var data = await usage.FetchAsync();
+        var data = await usage.FetchAsync(ct: TestContext.Current.CancellationToken);
         Assert.NotNull(data);
         Assert.NotNull(data!.Error);
         AssertNoSecret.DoesNotContain(data.Error, FakeToken);

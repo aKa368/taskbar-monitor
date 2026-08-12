@@ -103,6 +103,8 @@ public sealed class UsagePoller : IDisposable, IAsyncDisposable
 {
     private readonly object _gate = new();
     private readonly Dictionary<string, UsageData> _cache = new(StringComparer.Ordinal);
+    private readonly CancellationTokenSource _cts = new();
+    private readonly List<Task> _inFlight = new();
     private readonly CommandCodeUsage _commandCode;
     private readonly OpenCodeUsage _opencode;
     private readonly CodexUsage _codex;
@@ -143,10 +145,26 @@ public sealed class UsagePoller : IDisposable, IAsyncDisposable
         if (_sqliteTimer is not null || _apiTimer is not null)
             return;
 
-        _sqliteTimer = new Timer(_ => _ = RefreshSqliteAsync(), null, TimeSpan.Zero, _options.SqlitePollInterval);
+        _sqliteTimer = new Timer(_ => TrackInFlight(RefreshSqliteAsync(_cts.Token)), null, TimeSpan.Zero, _options.SqlitePollInterval);
         // Fetch immediately; waiting five minutes made the usage pods look dead
         // after startup even when valid credentials were already present.
-        _apiTimer = new Timer(_ => _ = RefreshApiAsync(), null, TimeSpan.Zero, _options.ApiPollInterval);
+        _apiTimer = new Timer(_ => TrackInFlight(RefreshApiAsync(_cts.Token)), null, TimeSpan.Zero, _options.ApiPollInterval);
+    }
+
+    /// <summary>Tracks a fire-and-forget poll so <see cref="DisposeAsync"/> can await it.</summary>
+    private void TrackInFlight(Task task)
+    {
+        lock (_gate)
+            _inFlight.Add(task);
+        _ = task.ContinueWith(
+            static (t, state) =>
+            {
+                var poller = (UsagePoller)state!;
+                lock (poller._gate)
+                    poller._inFlight.Remove(t);
+            },
+            this,
+            TaskScheduler.Default);
     }
 
     public void Stop()
@@ -173,8 +191,9 @@ public sealed class UsagePoller : IDisposable, IAsyncDisposable
         }
     }
 
-    public Task RefreshSqliteAsync() => Task.Run(() =>
+    public Task RefreshSqliteAsync(CancellationToken ct = default) => Task.Run(() =>
     {
+        ct.ThrowIfCancellationRequested();
         if (Interlocked.CompareExchange(ref _polling, 1, 0) != 0)
             return;
         try
@@ -185,7 +204,7 @@ public sealed class UsagePoller : IDisposable, IAsyncDisposable
         {
             Interlocked.Exchange(ref _polling, 0);
         }
-    });
+    }, ct);
 
     public async Task RefreshApiAsync(CancellationToken ct = default)
     {
@@ -267,14 +286,38 @@ public sealed class UsagePoller : IDisposable, IAsyncDisposable
     {
         if (_disposed)
             return;
-        Stop();
         _disposed = true;
+
+        // Graceful shutdown: stop new polls, cancel in-flight HTTP requests,
+        // then wait for the current poll before disposing the HTTP clients.
+        Stop();
+        _cts.Cancel();
+
+        Task[] pending;
+        lock (_gate)
+            pending = _inFlight.ToArray();
+        if (pending.Length > 0)
+        {
+            try
+            {
+                await Task.WhenAll(pending).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected: cancellation raced the request completion.
+            }
+            catch (Exception)
+            {
+                // Poll failures are already surfaced redacted via UsageData.Error.
+            }
+        }
+
+        _cts.Dispose();
         if (_commandCode is IDisposable c) c.Dispose();
         if (_opencode is IDisposable o) o.Dispose();
         if (_codex is IDisposable k) k.Dispose();
         if (_antigravity is IDisposable a) a.Dispose();
         if (_claude is IDisposable cl) cl.Dispose();
-        await Task.CompletedTask.ConfigureAwait(false);
     }
 
     /// <summary>Convenience disposal for <c>using</c> blocks.</summary>

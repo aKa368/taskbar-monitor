@@ -20,13 +20,32 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Restore
-        run: dotnet restore TaskbarMonitor.sln
+        run: dotnet restore TaskbarMonitor.sln --locked-mode
 
       - name: Build
         run: dotnet build TaskbarMonitor.sln --configuration Release --no-restore --warnaserror
 
       - name: Test
         run: dotnet test TaskbarMonitor.sln --configuration Release --no-build --logger "console;verbosity=minimal"
+
+      - name: Test with coverage
+        run: dotnet test TaskbarMonitor.sln --configuration Release --no-build --collect:"XPlat Code Coverage" --results-directory artifacts/coverage
+
+      - name: Check formatting
+        run: dotnet format TaskbarMonitor.sln --verify-no-changes --no-restore
+
+      - name: Check .slnx covers every project in .sln
+        shell: pwsh
+        run: |
+          $sln = Select-String -Path TaskbarMonitor.sln -Pattern '"((?:src|tests)\\[^"]+\.csproj)"' | ForEach-Object { $_.Matches[0].Groups[1].Value }
+          $slnx = Select-String -Path TaskbarMonitor.slnx -Pattern 'Path="([^"]+)"' | ForEach-Object { $_.Matches[0].Groups[1].Value }
+          $sln = ($sln | ForEach-Object { $_ -replace '\\','/' } | Sort-Object)
+          $slnx = ($slnx | ForEach-Object { $_ -replace '\\','/' } | Sort-Object)
+          $missing = Compare-Object $sln $slnx | Where-Object { $_.SideIndicator -eq '<=' } | ForEach-Object { $_.InputObject }
+          if ($missing) {
+            Write-Error "Projects in .sln missing from .slnx: $($missing -join ', ')"
+            exit 1
+          }
 
       - name: Check vulnerable packages
         run: dotnet list TaskbarMonitor.sln package --vulnerable --include-transitive

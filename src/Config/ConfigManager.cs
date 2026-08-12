@@ -195,7 +195,6 @@ public class ConfigManager : INotifyPropertyChanged, IDisposable
                     return;
                 }
 
-                string json = ReadFileWithRetry(_configPath);
                 var options = new JsonSerializerOptions
                 {
                     PropertyNameCaseInsensitive = true,
@@ -203,7 +202,7 @@ public class ConfigManager : INotifyPropertyChanged, IDisposable
                     AllowTrailingCommas = true
                 };
 
-                var loaded = JsonSerializer.Deserialize<ConfigData>(json, options);
+                var loaded = DeserializeOrNull(options);
                 if (loaded != null)
                 {
                     // Ensure sub-objects are not null
@@ -214,7 +213,9 @@ public class ConfigManager : INotifyPropertyChanged, IDisposable
                 }
                 else
                 {
-                    _config = GetDefaultConfig();
+                    // The active file was corrupt; prefer the last good backup
+                    // over a hard reset to defaults.
+                    _config = TryLoadBackup(options) ?? GetDefaultConfig();
                 }
             }
             catch (Exception)
@@ -226,6 +227,41 @@ public class ConfigManager : INotifyPropertyChanged, IDisposable
 
         OnPropertyChanged(nameof(Config));
         ConfigReloaded?.Invoke(this, Config);
+    }
+
+    private ConfigData? DeserializeOrNull(JsonSerializerOptions options)
+    {
+        string json = ReadFileWithRetry(_configPath);
+        try
+        {
+            return JsonSerializer.Deserialize<ConfigData>(json, options);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private ConfigData? TryLoadBackup(JsonSerializerOptions options)
+    {
+        string backupPath = _configPath + ".bak";
+        if (!File.Exists(backupPath))
+            return null;
+        try
+        {
+            string json = ReadFileWithRetry(backupPath);
+            var loaded = JsonSerializer.Deserialize<ConfigData>(json, options);
+            if (loaded == null)
+                return null;
+            loaded.Metrics ??= new MetricsConfig();
+            loaded.Agents ??= new AgentsConfig();
+            loaded.Colors ??= new ColorsConfig();
+            return loaded;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 
     public void Save(ConfigData? configToSave = null)
@@ -254,7 +290,30 @@ public class ConfigManager : INotifyPropertyChanged, IDisposable
         };
 
         string json = JsonSerializer.Serialize(data, options);
-        File.WriteAllText(path, json);
+
+        // Atomic write: serialize to a temp file in the same directory, then
+        // replace the target. A crash mid-write can never leave a truncated
+        // config.json, and the previous good content is kept as .bak.
+        string tempPath = path + ".tmp";
+        File.WriteAllText(tempPath, json);
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Replace(tempPath, path, path + ".bak");
+            }
+            else
+            {
+                File.Move(tempPath, path);
+            }
+        }
+        catch
+        {
+            // Last-resort fallback if the volume does not support atomic
+            // replace (rare): copy in place and clean up the temp file.
+            File.Copy(tempPath, path, overwrite: true);
+            try { File.Delete(tempPath); } catch { }
+        }
     }
 
     private static string ReadFileWithRetry(string path, int maxAttempts = 3)

@@ -108,7 +108,7 @@ public sealed class CodexUsageTests
             var stub = new StubHttpHandler()
                 .On("GET", "/backend-api/wham/usage", (200, UsagePayload));
             using var usage = new CodexUsage(stub, authPath);
-            var data = await usage.FetchAsync();
+            var data = await usage.FetchAsync(ct: TestContext.Current.CancellationToken);
 
             Assert.NotNull(data);
             Assert.Null(data!.Error);
@@ -135,7 +135,7 @@ public sealed class CodexUsageTests
             var stub = new StubHttpHandler()
                 .On("GET", "/backend-api/wham/usage", (401, "{\"error\":\"token expired\"}"));
             using var usage = new CodexUsage(stub, authPath);
-            var data = await usage.FetchAsync();
+            var data = await usage.FetchAsync(ct: TestContext.Current.CancellationToken);
 
             Assert.NotNull(data);
             Assert.Contains("401", data!.Error);
@@ -157,7 +157,7 @@ public sealed class CodexUsageTests
             var stub = new StubHttpHandler()
                 .On("GET", "/backend-api/wham/usage", (401, "{\"error\":\"bad token\"}"));
             using var usage = new CodexUsage(stub, authPath);
-            var data = await usage.FetchAsync();
+            var data = await usage.FetchAsync(ct: TestContext.Current.CancellationToken);
 
             Assert.NotNull(data);
             Assert.NotNull(data!.Error);
@@ -173,7 +173,7 @@ public sealed class CodexUsageTests
     public async Task MissingAuthFileReturnsFailureWithoutThrowing()
     {
         using var usage = new CodexUsage(authPath: "Z:\\missing\\auth.json");
-        var data = await usage.FetchAsync();
+        var data = await usage.FetchAsync(ct: TestContext.Current.CancellationToken);
         Assert.NotNull(data);
         Assert.Contains("auth.json", data!.Error);
     }
@@ -185,7 +185,7 @@ public sealed class CodexUsageTests
         try
         {
             using var usage = new CodexUsage(new NetworkDownHandler(), authPath);
-            var data = await usage.FetchAsync();
+            var data = await usage.FetchAsync(ct: TestContext.Current.CancellationToken);
             Assert.NotNull(data);
             Assert.NotNull(data!.Error);
             AssertNoSecret.DoesNotContain(data.Error, FakeToken);
@@ -205,7 +205,7 @@ public sealed class CodexUsageTests
             var leaky = new StubHttpHandler();
             leaky.On("GET", "/backend-api/wham/usage", _ => throw new HttpRequestException($"auth rejected with bearer {FakeToken}"));
             using var usage = new CodexUsage(leaky, authPath);
-            var data = await usage.FetchAsync();
+            var data = await usage.FetchAsync(ct: TestContext.Current.CancellationToken);
 
             Assert.NotNull(data);
             Assert.NotNull(data!.Error);
