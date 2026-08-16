@@ -223,6 +223,18 @@ public class ConfigManagerTests : IDisposable
     }
 
     [Fact]
+    public void LegacyPowerKeyIsIgnoredAndNotWrittenBack()
+    {
+        string configPath = Path.Combine(_tempDirectory, "config_legacy_power.json");
+        File.WriteAllText(configPath, "{\"metrics\":{\"cpu\":true,\"power\":true}}");
+        using var manager = new ConfigManager(configPath);
+
+        manager.Save(manager.Config);
+
+        Assert.DoesNotContain("power", File.ReadAllText(configPath), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void SaveIsAtomicAndKeepsBackup()
     {
         string configPath = Path.Combine(_tempDirectory, "config_atomic.json");

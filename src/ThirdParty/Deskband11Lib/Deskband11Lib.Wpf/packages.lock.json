@@ -1,0 +1,19 @@
+{
+  "version": 2,
+  "dependencies": {
+    "net10.0-windows10.0.26100": {
+      "Microsoft.Windows.SDK.BuildTools": {
+        "type": "Transitive",
+        "resolved": "10.0.28000.1839",
+        "contentHash": "xPRyq2l8rBbKPOEymCGGN1+086KHsMpXz2bhP2Ha3Woo0tsqrnEXUO/iINJ5kqOvax78LtSReoAZi26rFqOdPg=="
+      },
+      "deskband11lib.core": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.Windows.SDK.BuildTools": "[10.0.28000.1839, )"
+        }
+      }
+    },
+    "net10.0-windows10.0.26100/win-x64": {}
+  }
+}

@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using Microsoft.Win32;
 using TaskbarMonitor.Config;
+using TaskbarMonitor.UI;
 
 namespace TaskbarMonitor;
 
@@ -11,9 +12,9 @@ public partial class App : Application
 {
     private const string MutexName = "TaskbarMonitor_SingleInstance_Mutex_AGY";
     private static Mutex? _singleInstanceMutex;
-    private MainWindow? _window;
+    private TaskbarContentViewModel? _viewModel;
+    private TaskbarPairLifecycle? _pairLifecycle;
     private TrayIconService? _trayIcon;
-    private readonly TaskbarRecoveryCoordinator _taskbarRecovery = new();
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -30,39 +31,9 @@ public partial class App : Application
         ConfigManager.Instance.ConfigReloaded += (_, cfg) => UpdateAutostartRegistry(cfg.Autostart);
         _trayIcon = new TrayIconService();
 
-        await InitializeMainWindowAsync();
-    }
-
-    private async Task InitializeMainWindowAsync()
-    {
-        var window = new MainWindow();
-        _window = window;
-        window.TaskbarContentHost.TaskbarWindowRecreated += OnTaskbarWindowChanged;
-        window.TaskbarContentHost.TaskbarWindowDisappeared += OnTaskbarWindowChanged;
-
-        // Attach before Show, matching Deskband11Lib's WPF sample. The HWND
-        // exists, is prepared, and is parented before it can flash on screen.
-        await window.PrepareTaskbarContentAsync();
-        window.Show();
-    }
-
-    private async void OnTaskbarWindowChanged(object? sender, EventArgs e)
-    {
-        await _taskbarRecovery.RunAsync(async () =>
-        {
-            if (_window == null) return;
-
-            var oldWindow = _window;
-            _window = null;
-            oldWindow.TaskbarContentHost.TaskbarWindowRecreated -= OnTaskbarWindowChanged;
-            oldWindow.TaskbarContentHost.TaskbarWindowDisappeared -= OnTaskbarWindowChanged;
-
-            // Explorer has just replaced the taskbar HWND. Rebuild the hosted
-            // WPF window instead of trying to reuse a destroyed child HWND.
-            await Task.Delay(1000);
-            oldWindow.Close();
-            await InitializeMainWindowAsync();
-        });
+        _viewModel = new TaskbarContentViewModel();
+        _pairLifecycle = new TaskbarPairLifecycle(() => new TaskbarWindowPair(_viewModel));
+        await _pairLifecycle.StartAsync();
     }
 
     private static void UpdateAutostartRegistry(bool enable)
@@ -90,7 +61,8 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
-        _window?.Close();
+        _pairLifecycle?.RequestShutdown();
+        _viewModel?.Dispose();
         _trayIcon?.Dispose();
         _singleInstanceMutex?.Dispose();
         base.OnExit(e);

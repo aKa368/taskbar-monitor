@@ -7,6 +7,7 @@ namespace TaskbarMonitor.Metrics;
 public sealed class TemperatureMonitor : IDisposable
 {
     private readonly List<PerformanceCounter> _counters = [];
+    public string SourceDescription { get; private set; } = "Windows thermal zone unavailable";
 
     public TemperatureMonitor()
     {
@@ -55,7 +56,11 @@ public sealed class TemperatureMonitor : IDisposable
             }
         }
 
-        if (count > 0) return total / count;
+        if (count > 0)
+        {
+            SourceDescription = "Windows Thermal Zone Information (ACPI zone; not guaranteed CPU package temperature)";
+            return total / count;
+        }
 
         // Many laptops expose temperature only through ACPI WMI. This is
         // best-effort and may legitimately return no rows on desktop PCs.
@@ -82,7 +87,9 @@ public sealed class TemperatureMonitor : IDisposable
             Diagnostics.ReportReaderFailure("temperature.wmi", ex);
         }
 
-        return count == 0 ? 0 : total / count;
+        if (count == 0) return double.NaN;
+        SourceDescription = "MSAcpi_ThermalZoneTemperature (ACPI zone; not guaranteed CPU package temperature)";
+        return total / count;
     }
 
     /// <summary>Thermal performance counters may expose Kelvin or tenths of Kelvin.</summary>

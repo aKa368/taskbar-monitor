@@ -122,4 +122,5 @@ public class LayoutManagerTests
         Assert.Equal(new[] { "cpu", "ram", "gpu", "disk", "network" },
             manager.Rows[0].OfType<MetricPodViewModel>().Select(p => p.Key));
     }
+
 }

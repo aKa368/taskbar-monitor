@@ -7,6 +7,7 @@ A compact **Windows 11 taskbar widget** for local system metrics and optional AI
 ## What it shows
 
 - CPU and RAM utilization
+- Optional power sensor reading in watts. Battery discharge represents whole-system battery output; the Windows Energy Meter fallback is labelled as package/sensor power and is never presented as wall-outlet consumption.
 - GPU utilization and best-effort CPU temperature. GPU temperature is deliberately shown as `--°C` when Windows does not expose it through a user-mode API; this release does not load kernel/hardware drivers.
 - One compact network cell: `↑512K ↓1.5M`
 - Optional local usage summaries for CommandCode and OpenCode
@@ -79,7 +80,8 @@ Example (safe defaults):
     "network": true,
     "disk": false,
     "gpu": true,
-    "temperature": true
+    "temperature": true,
+    "power": false
   },
   "agents": {
     "commandcode": true,
@@ -113,7 +115,7 @@ Measured on the development Windows 11 machine with the default Grid layout and 
 | Listener ports | 0 TCP, 0 UDP |
 | Clean framework-dependent `win-x64` publish | ~32 MB |
 
-CPU/RAM/network are sampled every 2 seconds. GPU utilization is cached for 5 seconds; disk and temperature readers are cached for 10 seconds to avoid continuous WMI/hardware-sensor work. These are machine-specific observations, not resource guarantees.
+Only enabled collectors are created. CPU/RAM/network are sampled every 2 seconds. GPU and power are cached for 5 seconds; disk and temperature readers are cached for 10 seconds. GPU uses one formatted WMI query per sample instead of retaining a performance-counter handle for every process/engine instance. These are machine-specific observations, not resource guarantees.
 
 ## Build, test, and run
 

@@ -122,6 +122,8 @@ public sealed class SettingsPaletteViewModel : INotifyPropertyChanged
             () => _config.Metrics.Gpu, v => _config.Metrics.Gpu = v);
         AddToggle(list, "toggle-metric-temperature", "Metric: Temperature", "Bật/tắt pod nhiệt độ", SettingsCommandKind.ToggleMetric,
             () => _config.Metrics.Temperature, v => _config.Metrics.Temperature = v);
+        AddToggle(list, "toggle-metric-ram-temperature", "Metric: RAM temperature", "DIMM sensor if a user-mode provider exists; otherwise --°C", SettingsCommandKind.ToggleMetric,
+            () => _config.Metrics.RamTemperature, v => _config.Metrics.RamTemperature = v);
 
         // Agents
         AddToggle(list, "toggle-agent-commandcode", "Agent: CommandCode", "Bật/tắt pod CommandCode", SettingsCommandKind.ToggleAgent,
@@ -149,24 +151,6 @@ public sealed class SettingsPaletteViewModel : INotifyPropertyChanged
                 Execute = () =>
                 {
                     _config.UpdateIntervalSeconds = interval;
-                    _save(_config);
-                }
-            });
-        }
-
-        // Position
-        foreach (var position in new[] { "Left", "Center", "Right" })
-        {
-            list.Add(new SettingsCommand
-            {
-                Id = $"set-position-{position}",
-                Label = $"Position: {position}",
-                Description = "Vị trí widget trong taskbar",
-                Kind = SettingsCommandKind.SetPlacement,
-                IsActive = () => string.Equals(_config.Position, position, StringComparison.OrdinalIgnoreCase),
-                Execute = () =>
-                {
-                    _config.Position = position;
                     _save(_config);
                 }
             });

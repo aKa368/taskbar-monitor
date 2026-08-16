@@ -27,6 +27,9 @@ public class MetricsConfig
 
     [JsonPropertyName("temperature")]
     public bool Temperature { get; set; } = true;
+
+    [JsonPropertyName("ramTemperature")]
+    public bool RamTemperature { get; set; } = false;
 }
 
 public class AgentsConfig

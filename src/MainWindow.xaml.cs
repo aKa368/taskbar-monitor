@@ -1,71 +1,40 @@
-using System;
-using System.Threading.Tasks;
 using System.Windows;
 using Deskband11Lib.Core;
 using Deskband11Lib.Wpf;
 using TaskbarMonitor.Config;
+using TaskbarMonitor.UI;
 
 namespace TaskbarMonitor;
 
+/// <summary>Independent account-usage HWND pinned to the taskbar's left edge.</summary>
 public partial class MainWindow : Window
 {
     private readonly TaskbarContentHostOptions _hostOptions;
+    private readonly TaskbarContentViewModel _viewModel;
     private bool _isClosing;
-
     public TaskbarContentHost TaskbarContentHost { get; }
 
-    public MainWindow()
+    public MainWindow(TaskbarContentViewModel viewModel)
     {
         InitializeComponent();
-
-        _hostOptions = CreateHostOptions(ConfigManager.Instance.Config);
-        TaskbarContentHost = new TaskbarContentHost(this, (FrameworkElement)Content, _hostOptions);
+        _viewModel = viewModel;
+        AccountHost.Content = new AccountTaskbarContent(viewModel);
+        _hostOptions = TaskbarHostOptions.CreateAccounts(ConfigManager.Instance.Config);
+        TaskbarContentHost = new TaskbarContentHost(this, Root, _hostOptions);
         ConfigManager.Instance.ConfigReloaded += OnConfigReloaded;
+        viewModel.LayoutChanged += OnLayoutChanged;
     }
 
-    /// <summary>
-    /// Waits for Explorer's taskbar layout, then converts this real WPF Window
-    /// into the taskbar child window. The host library owns HWND parenting,
-    /// clipping, UI Automation measurement, and Explorer restart recovery.
-    /// </summary>
     public Task PrepareTaskbarContentAsync() => TaskbarContentHost.AttachWhenLayoutReadyAsync();
 
-    private void OnConfigReloaded(object? sender, ConfigData config)
+    private void OnConfigReloaded(object? sender, ConfigData config) => Dispatcher.BeginInvoke(() =>
     {
-        Dispatcher.BeginInvoke(() =>
-        {
-            _hostOptions.PreferredWidth = Math.Max(80, config.PreferredWidth);
-            _hostOptions.Placement = ParsePosition(config.Position, config.Placement);
-            TaskbarContentHost.RefreshLayout();
-        });
-    }
+        _hostOptions.PreferredWidth = TaskbarHostOptions.AccountWidth(config);
+        TaskbarContentHost.RefreshLayout();
+    });
 
-    private static TaskbarContentHostOptions CreateHostOptions(ConfigData config) => new()
-    {
-        PreferredWidth = Math.Max(80, config.PreferredWidth),
-        PreferredHeight = 48,
-        Placement = ParsePosition(config.Position, config.Placement),
-        TrackTaskbarButtons = true,
-        TrackNotificationArea = true,
-        AllowFixedSlotResize = true,
-        AnimateLayoutChanges = false,
-        // Explorer layout almost never changes while the taskbar is idle. A 5s
-        // safety refresh keeps reattachment/resizing resilient without a 2 Hz
-        // host-layout polling cost.
-        LayoutRefreshInterval = TimeSpan.FromSeconds(5)
-    };
-
-    private static TaskbarContentPlacement ParsePosition(string? position, string? legacyPlacement)
-    {
-        return position?.ToLowerInvariant() switch
-        {
-            "left" => TaskbarContentPlacement.LeftEdge,
-            "right" => TaskbarContentPlacement.BeforeNotificationArea,
-            "center" => TaskbarContentPlacement.Auto,
-            _ when Enum.TryParse<TaskbarContentPlacement>(legacyPlacement, true, out var legacy) => legacy,
-            _ => TaskbarContentPlacement.Auto
-        };
-    }
+    private void OnLayoutChanged(object? sender, EventArgs e) => Dispatcher.BeginInvoke(
+        System.Windows.Threading.DispatcherPriority.Render, new Action(TaskbarContentHost.RefreshLayout));
 
     protected override void OnClosed(EventArgs e)
     {
@@ -73,10 +42,9 @@ public partial class MainWindow : Window
         {
             _isClosing = true;
             ConfigManager.Instance.ConfigReloaded -= OnConfigReloaded;
+            _viewModel.LayoutChanged -= OnLayoutChanged;
             TaskbarContentHost.Dispose();
-            TaskbarControl.Dispose();
         }
-
         base.OnClosed(e);
     }
 }

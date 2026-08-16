@@ -60,11 +60,6 @@ internal sealed class TrayIconService : IDisposable
             () => ConfigManager.Instance.Config.Layout,
             value => ConfigManager.Instance.Config.Layout = value));
         menu.Items.Add(BuildChoiceMenu(
-            "Position",
-            new[] { "Left", "Center", "Right" },
-            () => ConfigManager.Instance.Config.Position,
-            value => ConfigManager.Instance.Config.Position = value));
-        menu.Items.Add(BuildChoiceMenu(
             "Refresh interval",
             new[] { "1s", "2s", "5s" },
             () => $"{ConfigManager.Instance.Config.UpdateIntervalSeconds}s",
@@ -97,6 +92,7 @@ internal sealed class TrayIconService : IDisposable
         metrics.DropDownItems.Add(BuildToggle("Disk", c => c.Metrics.Disk, (c, value) => c.Metrics.Disk = value));
         metrics.DropDownItems.Add(BuildToggle("GPU", c => c.Metrics.Gpu, (c, value) => c.Metrics.Gpu = value));
         metrics.DropDownItems.Add(BuildToggle("Temperature", c => c.Metrics.Temperature, (c, value) => c.Metrics.Temperature = value));
+        metrics.DropDownItems.Add(BuildToggle("RAM temperature", c => c.Metrics.RamTemperature, (c, value) => c.Metrics.RamTemperature = value));
         return metrics;
     }
 

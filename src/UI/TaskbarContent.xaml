@@ -11,7 +11,7 @@
         <ui:PodTemplateSelector x:Key="PodTemplateSelector" />
 
         <DataTemplate x:Key="MetricPodTemplate">
-            <Border Background="Transparent" BorderBrush="#33FFFFFF" BorderThickness="1"
+            <Border Background="Transparent" BorderBrush="#33FFFFFF" BorderThickness="1" ToolTip="{Binding ToolTipText}"
                     CornerRadius="4" Padding="5,1" Margin="0,0,4,0" VerticalAlignment="Center">
                 <TextBlock Text="{Binding ValueText}" Foreground="#EEEEEE"
                            FontFamily="{Binding DataContext.FontFamily, RelativeSource={RelativeSource AncestorType=UserControl}}"
@@ -21,7 +21,7 @@
 
         <!-- Fixed Grid metric: bounded content prevents a changing value from resizing a column. -->
         <DataTemplate x:Key="GridMetricPodTemplate">
-            <Border Background="Transparent" BorderBrush="#33FFFFFF" BorderThickness="1"
+            <Border Background="Transparent" BorderBrush="#33FFFFFF" BorderThickness="1" ToolTip="{Binding ToolTipText}"
                     CornerRadius="4" Padding="4,1" Margin="0" VerticalAlignment="Center" ClipToBounds="True">
                 <TextBlock Text="{Binding ValueText}" Foreground="#EEEEEE"
                            FontFamily="{Binding DataContext.FontFamily, RelativeSource={RelativeSource AncestorType=UserControl}}"
@@ -34,7 +34,7 @@
         <DataTemplate x:Key="NetworkRateTemplate">
             <Border Background="Transparent" BorderBrush="#33FFFFFF" BorderThickness="1"
                     CornerRadius="4" Padding="3,1" Margin="0" VerticalAlignment="Center"
-                    Width="128" ClipToBounds="True">
+                    ClipToBounds="True">
                 <TextBlock Text="{Binding}" Foreground="#EEEEEE"
                            FontFamily="{Binding DataContext.FontFamily, RelativeSource={RelativeSource AncestorType=UserControl}}"
                            FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center"
@@ -45,7 +45,7 @@
         <!-- Fixed Grid agent: a Grid (not StackPanel) gives the changing usage text
              a bounded remaining column, so it cannot widen its pod. -->
         <DataTemplate x:Key="GridAgentPodTemplate">
-            <Border Background="Transparent" BorderBrush="#33FFFFFF" BorderThickness="1"
+            <Border Background="Transparent" BorderBrush="#33FFFFFF" BorderThickness="1" ToolTip="{Binding ToolTipText}"
                     CornerRadius="4" Padding="3,1" Margin="0" VerticalAlignment="Center" ClipToBounds="True">
                 <Grid>
                     <Grid.ColumnDefinitions>
@@ -63,7 +63,7 @@
         </DataTemplate>
 
         <DataTemplate x:Key="AgentPodTemplate">
-            <Border Background="Transparent" BorderBrush="#33FFFFFF" BorderThickness="1"
+            <Border Background="Transparent" BorderBrush="#33FFFFFF" BorderThickness="1" ToolTip="{Binding ToolTipText}"
                     CornerRadius="4" Padding="4,1" Margin="0,0,4,0" VerticalAlignment="Center">
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <Border Background="{Binding ColorHex}" CornerRadius="3" Padding="3,1" Margin="0,0,3,0">
@@ -76,7 +76,7 @@
     </UserControl.Resources>
 
     <!-- Transparent root lets Explorer's taskbar acrylic/transparency show through. -->
-    <Grid Background="Transparent" SnapsToDevicePixels="True" UseLayoutRounding="True">
+    <Grid Background="Transparent" SnapsToDevicePixels="True" UseLayoutRounding="True" ClipToBounds="True">
         <!-- Normal presets -->
         <StackPanel Orientation="Horizontal" VerticalAlignment="Center"
                     Visibility="{Binding IsSingleRow, Converter={StaticResource BoolToVis}}">
@@ -96,26 +96,24 @@
             </ItemsControl>
         </StackPanel>
 
-        <!-- Grid uses a fixed 3 × 2 matrix. All cells have a stable maximum width;
-             truncation happens inside the cell rather than moving a neighbor. -->
+        <!-- Accounts stay on the left and system metrics on the right. Both
+             groups share one bounded host visual and clip at the tray inset. -->
         <Grid Visibility="{Binding IsGrid, Converter={StaticResource BoolToVis}}"
-              Margin="1,0" VerticalAlignment="Center">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-            </Grid.RowDefinitions>
+              Margin="1,0,6,0" VerticalAlignment="Center" HorizontalAlignment="Stretch" ClipToBounds="True">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="128" />
-                <ColumnDefinition Width="128" />
-                <ColumnDefinition Width="128" />
+                <ColumnDefinition Width="5*" MinWidth="0" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="7*" MinWidth="0" />
             </Grid.ColumnDefinitions>
-            <ContentControl Grid.Row="0" Grid.Column="0" Content="{Binding GridCpu}" ContentTemplate="{StaticResource GridMetricPodTemplate}" />
-            <ContentControl Grid.Row="1" Grid.Column="0" Content="{Binding GridRam}" ContentTemplate="{StaticResource GridMetricPodTemplate}" />
-            <ContentControl Grid.Row="0" Grid.Column="1" Content="{Binding GridGpu}" ContentTemplate="{StaticResource GridMetricPodTemplate}" />
-            <ContentControl Grid.Row="1" Grid.Column="1" Content="{Binding NetworkRateText}"
-                            ContentTemplate="{StaticResource NetworkRateTemplate}" />
-            <ContentControl Grid.Row="0" Grid.Column="2" Content="{Binding GridCodex}" ContentTemplate="{StaticResource GridAgentPodTemplate}" />
-            <ContentControl Grid.Row="1" Grid.Column="2" Content="{Binding GridProvider}" ContentTemplate="{StaticResource GridAgentPodTemplate}" />
+            <ItemsControl Grid.Column="0" ItemsSource="{Binding GridAgents}" ClipToBounds="True"
+                          ItemTemplate="{StaticResource GridAgentPodTemplate}">
+                <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Rows="2" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+            </ItemsControl>
+            <Border Grid.Column="1" Width="1" Margin="4,2" Background="#55FFFFFF" />
+            <ItemsControl Grid.Column="2" ItemsSource="{Binding GridMetrics}" ClipToBounds="True"
+                          ItemTemplate="{StaticResource GridMetricPodTemplate}">
+                <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Rows="2" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+            </ItemsControl>
         </Grid>
     </Grid>
 </UserControl>

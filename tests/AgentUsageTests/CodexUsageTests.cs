@@ -80,6 +80,18 @@ public sealed class CodexUsageTests
     }
 
     [Fact]
+    public void LivePrimaryOnlySevenDayWindowMapsToSevenDayUsage()
+    {
+        const string payload = """
+        { "rate_limit": { "primary_window": { "used_percent": 20, "limit_window_seconds": 604800, "reset_at": 1781622947 }, "secondary_window": null } }
+        """;
+        var data = CodexUsage.ToUsageData(CodexUsage.ParseResponse(payload)!);
+        Assert.Null(data.UsedPercent5h);
+        Assert.Equal(20, data.UsedPercent7d);
+        Assert.Equal(DateTimeOffset.FromUnixTimeSeconds(1781622947), data.ResetsAt7d);
+    }
+
+    [Fact]
     public void ClassifiesWindowsBySizePrimaryIsFiveHourSecondaryIsSevenDay()
     {
         var parsed = CodexUsage.ParseResponse(UsagePayload);
