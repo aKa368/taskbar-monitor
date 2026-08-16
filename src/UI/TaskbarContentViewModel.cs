@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -14,15 +14,15 @@ using TaskbarMonitor.UI.Layout;
 namespace TaskbarMonitor.UI;
 
 /// <summary>
-/// ViewModel chính cho widget taskbar.
-/// - LayoutManager build pod list theo layout (1 hàng hoặc 2 hàng TwoLine).
-/// - Tick() chỉ update text/image của pod đã có — không rebuild UI tree.
-/// - Wire trực tiếp MetricSampler + UsagePoller (không reflection).
-/// - Chỉ cập nhật text metric/usage; không render chart trong taskbar.
+/// ViewModel chÃ­nh cho widget taskbar.
+/// - LayoutManager build pod list theo layout (1 hÃ ng hoáº·c 2 hÃ ng TwoLine).
+/// - Tick() chá»‰ update text/image cá»§a pod Ä‘Ã£ cÃ³ â€” khÃ´ng rebuild UI tree.
+/// - Wire trá»±c tiáº¿p MetricSampler + UsagePoller (khÃ´ng reflection).
+/// - Chá»‰ cáº­p nháº­t text metric/usage; khÃ´ng render chart trong taskbar.
 /// </summary>
 public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
 {
-    private readonly DispatcherTimer _timer;
+    private readonly SharedTaskbarTickSource _timer;
     private readonly LayoutManager _layout = new();
     private readonly List<IDisposable> _metricDisposables = new();
 
@@ -35,7 +35,7 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
     private UsagePoller? _poller;
     private string? _usageInitializationError;
     private string _fontFamily = "Sarasa Fixed SC";
-    private string _networkRateText = "↑ -- ↓ --";
+    private string _networkRateText = "â†‘ -- â†“ --";
     private string _gridPerformanceText = string.Empty;
     private bool _disposed;
 
@@ -60,7 +60,7 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
     public AgentPodViewModel? GridPrimaryAgent => GridAgents.OfType<AgentPodViewModel>().FirstOrDefault();
     public IReadOnlyList<AgentPodViewModel> GridSecondaryAgents => GridAgents.OfType<AgentPodViewModel>().Skip(1).ToList();
 
-    /// <summary>Raise khi layout thay đổi (pods rebuild) — MainWindow dùng để auto-resize widget.</summary>
+    /// <summary>Raise khi layout thay Ä‘á»•i (pods rebuild) â€” MainWindow dÃ¹ng Ä‘á»ƒ auto-resize widget.</summary>
     public event EventHandler? LayoutChanged;
 
     public string FontFamily
@@ -93,7 +93,7 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
     {
         get
         {
-            return $"GPU utilization — busiest physical engine · Temperature: {_gpuTemperatureSource}";
+            return $"GPU utilization â€” busiest physical engine Â· Temperature: {_gpuTemperatureSource}";
         }
     }
 
@@ -129,13 +129,11 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
             LayoutChanged?.Invoke(this, EventArgs.Empty);
         };
 
-        _timer = new DispatcherTimer
-        {
-            Interval = TimeSpan.FromSeconds(Math.Max(1, Config.UpdateIntervalSeconds))
-        };
-        _timer.Tick += (_, _) => Tick();
+        _timer = SharedTaskbarTickSource.Subscribe(
+            Tick,
+            TimeSpan.FromSeconds(Math.Max(1, Config.UpdateIntervalSeconds)));
 
-        ApplyConfigSettings(); // cần _timer đã tồn tại (đặt interval theo layout)
+        ApplyConfigSettings(); // cáº§n _timer Ä‘Ã£ tá»“n táº¡i (Ä‘áº·t interval theo layout)
 
         _timer.Start();
         Tick();
@@ -254,14 +252,14 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
 
             // GPU thermal libraries often need privileged driver access. This
             // user-mode widget intentionally does not load hardware drivers;
-            // lack of a trusted sensor is shown as --°C.
+            // lack of a trusted sensor is shown as --Â°C.
 
             // Native counters and adapter enumeration are already cached by the
             // UI; a 2.5-second sampling cadence keeps the widget responsive
             // while avoiding unnecessary native-counter wake-ups.
             if (readers.Count > 0)
             {
-                _sampler = new MetricSampler(readers, 2500, 2);
+                _sampler = new MetricSampler(readers, 2500, 2, useSharedClock: true);
                 // External GPU telemetry may take up to its process timeout.
                 // Prime lightweight counters synchronously; the timer performs
                 // the first GPU-temperature read on its worker thread.
@@ -271,7 +269,7 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
         }
         catch
         {
-            _sampler = null; // fallback random nếu không khởi tạo được
+            _sampler = null; // fallback random náº¿u khÃ´ng khá»Ÿi táº¡o Ä‘Æ°á»£c
         }
     }
 
@@ -326,7 +324,7 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
         {
             InitMetricsSampler();
             _poller?.Reconfigure(CreatePollerOptions(newConfig));
-            ApplyConfigSettings(forceRebuild: true); // config reload → ép rebuild pods
+            ApplyConfigSettings(forceRebuild: true); // config reload â†’ Ã©p rebuild pods
             _timer.Interval = TimeSpan.FromSeconds(Math.Max(1, newConfig.UpdateIntervalSeconds));
             OnPropertyChanged(string.Empty);
             Tick();
@@ -348,7 +346,7 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
         var kind = ParseLayoutKind(Config.Layout);
         _layout.Apply(kind, Config, forceRebuild);
 
-        // Performance: layout Minimal → tick 2s (ít CPU wake) — nếu config interval nhỏ hơn
+        // Performance: layout Minimal â†’ tick 2s (Ã­t CPU wake) â€” náº¿u config interval nhá» hÆ¡n
         if (kind == WidgetLayoutKind.Minimal)
         {
             _timer.Interval = TimeSpan.FromSeconds(Math.Max(2, Config.UpdateIntervalSeconds));
@@ -359,13 +357,13 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
-    private static WidgetLayoutKind ParseLayoutKind(string? layout)
+    public static WidgetLayoutKind ParseLayoutKind(string? layout)
     {
         if (Enum.TryParse<WidgetLayoutKind>(layout, ignoreCase: true, out var kind))
         {
-            return kind;
+            return WidgetLayoutKind.Grid;
         }
-        return WidgetLayoutKind.Compact;
+        return WidgetLayoutKind.Grid;
     }
 
     private void Tick()
@@ -403,8 +401,8 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
                 case "cpu":
                     value = cpu;
                     text = float.IsFinite(value) && cpuTemperature > 0
-                        ? $"CPU {value:F0}% · {cpuTemperature:F0}°C"
-                        : float.IsFinite(value) ? $"CPU {value:F0}% · --°C" : "CPU -- · --°C";
+                        ? $"CPU {value:F0}% Â· {cpuTemperature:F0}Â°C"
+                        : float.IsFinite(value) ? $"CPU {value:F0}% Â· --Â°C" : "CPU -- Â· --Â°C";
                     pod.ToolTipText = Config.Metrics.Temperature
                         ? _temperature?.SourceDescription ?? "Windows thermal zone unavailable"
                         : "CPU temperature disabled";
@@ -412,7 +410,7 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
                 case "ram":
                     value = ram;
                     text = Config.Metrics.Temperature && Config.Metrics.RamTemperature
-                        ? float.IsFinite(value) ? $"RAM {value:F0}% · {(float.IsFinite(ramTemperature) ? $"{ramTemperature:F0}°C" : "--°C")}" : "RAM -- · --°C"
+                        ? float.IsFinite(value) ? $"RAM {value:F0}% Â· {(float.IsFinite(ramTemperature) ? $"{ramTemperature:F0}Â°C" : "--Â°C")}" : "RAM -- Â· --Â°C"
                         : float.IsFinite(value) ? $"RAM {value:F0}%" : "RAM --";
                     pod.ToolTipText = Config.Metrics.RamTemperature ? _ramTemperatureReason : "RAM utilization";
                     break;
@@ -428,8 +426,8 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
                 case "gpu":
                     value = gpu;
                     text = float.IsFinite(gpu) && gpuTemperature > 0
-                        ? $"GPU {gpu:F0}% · {gpuTemperature:F0}°C"
-                        : float.IsFinite(gpu) ? $"GPU {gpu:F0}% · --°C" : "GPU -- · --°C";
+                        ? $"GPU {gpu:F0}% Â· {gpuTemperature:F0}Â°C"
+                        : float.IsFinite(gpu) ? $"GPU {gpu:F0}% Â· --Â°C" : "GPU -- Â· --Â°C";
                     pod.ToolTipText = Config.Metrics.Temperature ? _gpuTemperatureSource : "GPU temperature disabled";
                     break;
                 default:
@@ -468,10 +466,10 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
                 var last5h = data.Last5h;
                 if (last5h != null && data.UsedPercent5h == null)
                 {
-                    // SQLite agents: hiển thị cost + tokens thay vì % quota
+                    // SQLite agents: hiá»ƒn thá»‹ cost + tokens thay vÃ¬ % quota
                     double cost = last5h.Cost ?? 0;
                     double tok = (last5h.TokensTotal ?? 0) / 1e6;
-                    valueText = $"${cost:F2} · {tok:F1}M";
+                    valueText = $"${cost:F2} Â· {tok:F1}M";
                 }
                 else
                 {
@@ -480,7 +478,7 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
             }
 
             if (data?.Error is not null)
-                valueText = valueText == "--" ? "ERR" : $"{valueText} · ERR";
+                valueText = valueText == "--" ? "ERR" : $"{valueText} Â· ERR";
             else if (data is null && pod.Key == "Codex" && _usageInitializationError is not null)
                 valueText = "ERR";
             valueText = UsageTextFormatter.FormatCompactAgentDisplay(data,
@@ -537,10 +535,10 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
 
     private static string FormatNetworkText(float upKbps, float downKbps)
     {
-        if (!float.IsFinite(upKbps) || !float.IsFinite(downKbps)) return "↑ --  ↓ --";
+        if (!float.IsFinite(upKbps) || !float.IsFinite(downKbps)) return "â†‘ --  â†“ --";
         string upText = upKbps > 1024 ? $"{upKbps / 1024f:F1} MB/s" : $"{upKbps:F0} KB/s";
         string downText = downKbps > 1024 ? $"{downKbps / 1024f:F1} MB/s" : $"{downKbps:F0} KB/s";
-        return $"↑ {upText} ↓ {downText}";
+        return $"â†‘ {upText} â†“ {downText}";
     }
 
 

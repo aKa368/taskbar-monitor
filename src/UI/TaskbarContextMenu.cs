@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using TaskbarMonitor.Config;
 using TaskbarMonitor.UI.Layout;
@@ -7,9 +7,9 @@ using TaskbarMonitor.UI.Palette;
 namespace TaskbarMonitor.UI;
 
 /// <summary>
-/// Context menu chuột phải cho widget — settings trực quan toàn bộ.
-/// Submenu có checkmark theo trạng thái config hiện tại.
-/// Mọi thay đổi → ConfigManager.Save() → hot-reload tự rebuild UI.
+/// Context menu chuá»™t pháº£i cho widget â€” settings trá»±c quan toÃ n bá»™.
+/// Submenu cÃ³ checkmark theo tráº¡ng thÃ¡i config hiá»‡n táº¡i.
+/// Má»i thay Ä‘á»•i â†’ ConfigManager.Save() â†’ hot-reload tá»± rebuild UI.
 /// </summary>
 public static class TaskbarContextMenu
 {
@@ -18,7 +18,7 @@ public static class TaskbarContextMenu
         var menu = new ContextMenu();
 
         // Header: Settings Palette (command palette)
-        var paletteItem = new MenuItem { Header = "⚙ Settings Palette…" };
+        var paletteItem = new MenuItem { Header = "âš™ Settings Paletteâ€¦" };
         paletteItem.Click += (_, _) => ShowSettingsPalette();
         menu.Items.Add(paletteItem);
         menu.Items.Add(new Separator());
@@ -65,12 +65,12 @@ public static class TaskbarContextMenu
     private static MenuItem BuildLayoutMenu()
     {
         var item = new MenuItem { Header = "Layout" };
-        foreach (var kind in Enum.GetValues<WidgetLayoutKind>())
+        foreach (var kind in new[] { WidgetLayoutKind.Grid })
         {
             var info = LayoutDefinition.Get(kind);
             var sub = new MenuItem
             {
-                Header = $"{info.Name}  —  {info.Description}",
+                Header = $"{info.Name}  â€”  {info.Description}",
                 IsCheckable = true,
                 IsChecked = IsCurrent(kind)
             };

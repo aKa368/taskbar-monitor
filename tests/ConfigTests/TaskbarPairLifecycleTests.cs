@@ -1,4 +1,4 @@
-using TaskbarMonitor;
+﻿using TaskbarMonitor;
 using Xunit;
 
 namespace ConfigTests;
@@ -114,6 +114,57 @@ public sealed class TaskbarPairLifecycleTests
         Assert.Equal(3, lifecycle.Generation);
     }
 
+    [Fact]
+    public async Task ExplorerRestartRecoversWithinBoundUnderCpuContention()
+    {
+        await using var lifecycle = new TaskbarPairLifecycle(
+            () => new FakePair(false, false),
+            _ => TimeSpan.Zero);
+        await lifecycle.StartAsync();
+
+        var loadTask = Task.Run(() =>
+        {
+            var until = System.Diagnostics.Stopwatch.GetTimestamp()
+                + (long)(System.Diagnostics.Stopwatch.Frequency * 0.35);
+            while (System.Diagnostics.Stopwatch.GetTimestamp() < until)
+                System.Threading.Thread.SpinWait(20_000);
+        });
+
+        await Task.Delay(25, TestContext.Current.CancellationToken);
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        await lifecycle.SignalRecoveryAsync();
+        stopwatch.Stop();
+        await loadTask;
+
+        Assert.True(
+            stopwatch.Elapsed < TimeSpan.FromSeconds(2),
+            $"Explorer recovery took {stopwatch.Elapsed.TotalMilliseconds:F0} ms under CPU contention.");
+    }
+    [Fact]
+    public async Task RepeatedExplorerRecoveriesCreateOneHealthyPairPerNotification()
+    {
+        var created = 0;
+        var pairs = new List<FakePair>();
+        await using var lifecycle = new TaskbarPairLifecycle(() =>
+        {
+            var pair = new FakePair(false, false);
+            pairs.Add(pair);
+            Interlocked.Increment(ref created);
+            return pair;
+        }, _ => TimeSpan.Zero);
+
+        await lifecycle.StartAsync();
+        const int crashCount = 5;
+        for (var i = 0; i < crashCount; i++)
+            await lifecycle.SignalRecoveryAsync();
+
+        Assert.Equal(crashCount + 1, created);
+        Assert.Equal(crashCount + 1, lifecycle.Generation);
+        Assert.All(pairs.Take(crashCount), pair => Assert.True(pair.Closed));
+        Assert.True(pairs[^1].Shown);
+        Assert.False(pairs[^1].Closed);
+        Assert.False(pairs[^1].Disposed);
+    }
     [Fact]
     public async Task ShutdownDuringRetryDelayPreventsRecreation()
     {

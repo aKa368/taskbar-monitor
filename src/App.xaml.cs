@@ -15,6 +15,7 @@ public partial class App : Application
     private TaskbarContentViewModel? _viewModel;
     private TaskbarPairLifecycle? _pairLifecycle;
     private TrayIconService? _trayIcon;
+    private MemoryTelemetry? _memoryTelemetry;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -26,6 +27,8 @@ public partial class App : Application
             Shutdown();
             return;
         }
+
+        _memoryTelemetry = new MemoryTelemetry();
 
         UpdateAutostartRegistry(ConfigManager.Instance.Config.Autostart);
         ConfigManager.Instance.ConfigReloaded += (_, cfg) => UpdateAutostartRegistry(cfg.Autostart);
@@ -64,6 +67,7 @@ public partial class App : Application
         _pairLifecycle?.RequestShutdown();
         _viewModel?.Dispose();
         _trayIcon?.Dispose();
+        _memoryTelemetry?.Dispose();
         _singleInstanceMutex?.Dispose();
         base.OnExit(e);
     }

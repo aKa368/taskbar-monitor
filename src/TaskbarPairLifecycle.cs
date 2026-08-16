@@ -1,3 +1,6 @@
+using System.Diagnostics;
+using System.Runtime.CompilerServices;
+
 namespace TaskbarMonitor;
 
 internal interface ITaskbarWindowPair : IDisposable
@@ -11,131 +14,253 @@ internal interface ITaskbarWindowPair : IDisposable
 
 internal sealed class TaskbarPairLifecycle : IAsyncDisposable
 {
+    private static readonly TimeSpan RecoveryDebounce = TimeSpan.FromMilliseconds(25);
+    private static readonly TimeSpan SuccessfulSwapCooldown = TimeSpan.FromMilliseconds(250);
+
     private readonly Func<ITaskbarWindowPair> _factory;
     private readonly Func<int, TimeSpan> _backoff;
     private readonly CancellationTokenSource _shutdown = new();
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly object _recoveryTaskSync = new();
+
     private ITaskbarWindowPair? _current;
-    private int _recovering;
+    private Task? _recoveryTask;
     private int _recoveryDirty;
+    private int _disposed;
     private long _generation;
-    private bool _disposed;
+    private long _pairSequence;
+    private long _lastSuccessfulSwapTimestamp;
 
     internal TaskbarPairLifecycle(Func<ITaskbarWindowPair> factory, Func<int, TimeSpan>? backoff = null)
     {
         _factory = factory ?? throw new ArgumentNullException(nameof(factory));
-        _backoff = backoff ?? (attempt => TimeSpan.FromMilliseconds(Math.Min(2000, 250 * (1 << Math.Min(attempt, 3)))));
+        _backoff = backoff ?? (attempt => TimeSpan.FromMilliseconds(100 * (attempt + 1)));
     }
 
     internal long Generation => Interlocked.Read(ref _generation);
 
-    public Task StartAsync()
-    {
-        Interlocked.Exchange(ref _recoveryDirty, 1);
-        return RunRecoveryLoopAsync();
-    }
+    public Task StartAsync() => SignalRecoveryAsync();
 
     public Task SignalRecoveryAsync()
     {
-        if (_disposed) return Task.CompletedTask;
+        if (Volatile.Read(ref _disposed) != 0)
+            return Task.CompletedTask;
+
         Interlocked.Exchange(ref _recoveryDirty, 1);
-        return RunRecoveryLoopAsync();
+        lock (_recoveryTaskSync)
+        {
+            if (_recoveryTask is { IsCompleted: false })
+                return _recoveryTask;
+
+            var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            _recoveryTask = completion.Task;
+            _ = RunRecoveryLoopAsync(completion);
+            return completion.Task;
+        }
     }
 
-    private async Task RunRecoveryLoopAsync()
+    private async Task RunRecoveryLoopAsync(TaskCompletionSource completion)
     {
-        if (_disposed || Interlocked.CompareExchange(ref _recovering, 1, 0) != 0)
-            return;
-
+        Exception? failure = null;
         try
         {
-            // Explorer can broadcast several taskbar notifications for one restart.
-            // Debounce only replacement requests; an initial startup should remain immediate.
-            if (_current is not null)
-                await Task.Delay(25, _shutdown.Token).ConfigureAwait(true);
-
-            await _gate.WaitAsync(_shutdown.Token).ConfigureAwait(true);
-            try
+            while (Volatile.Read(ref _disposed) == 0 && Interlocked.Exchange(ref _recoveryDirty, 0) != 0)
             {
-                while (!_disposed && Interlocked.Exchange(ref _recoveryDirty, 0) != 0)
+                if (_current is not null)
+                    await Task.Delay(RecoveryDebounce, _shutdown.Token).ConfigureAwait(true);
+
+                await _gate.WaitAsync(_shutdown.Token).ConfigureAwait(true);
+                try
                 {
-                    DetachAndClose(_current);
-                    _current = null;
+                    if (Volatile.Read(ref _disposed) != 0)
+                        break;
+
+                    var previous = _current;
+                    await DelayAfterSuccessfulSwapAsync(_shutdown.Token).ConfigureAwait(true);
 
                     var attached = false;
                     const int maxAttachAttempts = 3;
-                    for (var attempt = 0; !attached && !_disposed && attempt < maxAttachAttempts; attempt++)
+                    for (var attempt = 0; !attached && Volatile.Read(ref _disposed) == 0 && attempt < maxAttachAttempts; attempt++)
                     {
-                        _shutdown.Token.ThrowIfCancellationRequested();
-                        var candidate = _factory();
-                        candidate.TaskbarChanged += OnTaskbarChanged;
+                        ITaskbarWindowPair? candidate = null;
+                        var pairId = Interlocked.Increment(ref _pairSequence);
                         try
                         {
+                            Trace.WriteLine($"[TaskbarPairLifecycle] create candidate={pairId} generation={Generation}");
+                            candidate = _factory();
+                            if (ReferenceEquals(previous, candidate))
+                                throw new InvalidOperationException("Taskbar pair factory returned the current pair instance.");
+
+                            candidate.TaskbarChanged += OnTaskbarChanged;
                             await candidate.AttachAccountAsync(_shutdown.Token).ConfigureAwait(true);
                             await candidate.AttachSystemAsync(_shutdown.Token).ConfigureAwait(true);
                             candidate.Show();
                             await Task.Delay(100, _shutdown.Token).ConfigureAwait(true);
                             candidate.Show();
+
                             _current = candidate;
+                            if (previous is not null)
+                                Interlocked.Exchange(ref _lastSuccessfulSwapTimestamp, Stopwatch.GetTimestamp());
                             Interlocked.Increment(ref _generation);
+                            Trace.WriteLine($"[TaskbarPairLifecycle] swap candidate={pairId} generation={Generation}");
+
+                            if (previous is not null)
+                                DetachAndClose(previous, "previous");
+
                             attached = true;
                         }
-                        catch
+                        catch (OperationCanceledException) when (_shutdown.IsCancellationRequested)
                         {
-                            DetachAndClose(candidate);
-                            if (_disposed) throw;
+                            DetachAndClose(candidate, $"cancelled-candidate-{pairId}");
+                            throw;
+                        }
+                        catch (Exception ex)
+                        {
+                            Trace.WriteLine($"[TaskbarPairLifecycle] candidate={pairId} attempt={attempt + 1} failed: {ex}");
+                            DetachAndClose(candidate, $"failed-candidate-{pairId}");
                             if (attempt + 1 < maxAttachAttempts)
                                 await Task.Delay(_backoff(attempt), _shutdown.Token).ConfigureAwait(true);
                         }
                     }
                 }
+                finally
+                {
+                    _gate.Release();
+                }
+            }
+        }
+        catch (OperationCanceledException) when (_shutdown.IsCancellationRequested)
+        {
+            Trace.WriteLine("[TaskbarPairLifecycle] recovery cancelled");
+        }
+        catch (Exception ex)
+        {
+            failure = ex;
+            Trace.WriteLine($"[TaskbarPairLifecycle] recovery loop failed: {ex}");
+        }
+        finally
+        {
+            TaskCompletionSource? nextCompletion = null;
+            lock (_recoveryTaskSync)
+            {
+                if (ReferenceEquals(_recoveryTask, completion.Task))
+                {
+                    _recoveryTask = null;
+                    if (Volatile.Read(ref _disposed) == 0 && Volatile.Read(ref _recoveryDirty) != 0)
+                    {
+                        nextCompletion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                        _recoveryTask = nextCompletion.Task;
+                    }
+                }
+            }
+
+            if (failure is not null)
+                completion.TrySetException(failure);
+            else
+                completion.TrySetResult();
+
+            if (nextCompletion is not null)
+                _ = RunRecoveryLoopAsync(nextCompletion);
+        }
+    }
+
+    private async Task DelayAfterSuccessfulSwapAsync(CancellationToken cancellationToken)
+    {
+        var last = Interlocked.Read(ref _lastSuccessfulSwapTimestamp);
+        if (last == 0)
+            return;
+
+        var elapsed = Stopwatch.GetElapsedTime(last);
+        var remaining = SuccessfulSwapCooldown - elapsed;
+        if (remaining > TimeSpan.Zero)
+            await Task.Delay(remaining, cancellationToken).ConfigureAwait(true);
+    }
+
+    private async void OnTaskbarChanged(object? sender, EventArgs e)
+    {
+        try
+        {
+            await SignalRecoveryAsync().ConfigureAwait(true);
+        }
+        catch (OperationCanceledException) when (_shutdown.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            Trace.WriteLine($"[TaskbarPairLifecycle] TaskbarChanged callback failed: {ex}");
+        }
+    }
+
+    private static void DetachAndClose(ITaskbarWindowPair? pair, string reason)
+    {
+        if (pair is null)
+            return;
+
+        var identity = RuntimeHelpers.GetHashCode(pair);
+        try
+        {
+            pair.Close();
+        }
+        catch (Exception ex)
+        {
+            Trace.WriteLine($"[TaskbarPairLifecycle] close pair={identity} reason={reason} failed: {ex}");
+        }
+
+        try
+        {
+            pair.Dispose();
+        }
+        catch (Exception ex)
+        {
+            Trace.WriteLine($"[TaskbarPairLifecycle] dispose pair={identity} reason={reason} failed: {ex}");
+        }
+    }
+
+    public void RequestShutdown()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            return;
+
+        _shutdown.Cancel();
+        _ = CloseCurrentAfterRecoveryAsync();
+    }
+
+    private async Task CloseCurrentAfterRecoveryAsync()
+    {
+        try
+        {
+            await _gate.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                var current = _current;
+                _current = null;
+                DetachAndClose(current, "shutdown");
             }
             finally
             {
                 _gate.Release();
             }
         }
-        catch (OperationCanceledException) when (_shutdown.IsCancellationRequested)
+        catch (ObjectDisposedException)
         {
-        }
-        finally
-        {
-            Interlocked.Exchange(ref _recovering, 0);
-            if (!_disposed && Volatile.Read(ref _recoveryDirty) != 0)
-                _ = RunRecoveryLoopAsync();
-        }
-    }
-
-    private async void OnTaskbarChanged(object? sender, EventArgs e)
-    {
-        try { await SignalRecoveryAsync().ConfigureAwait(true); }
-        catch (OperationCanceledException) when (_shutdown.IsCancellationRequested) { }
-    }
-
-    private static void DetachAndClose(ITaskbarWindowPair? pair)
-    {
-        if (pair is null) return;
-        try { pair.Close(); } catch { }
-        try { pair.Dispose(); } catch { }
-    }
-
-    public void RequestShutdown()
-    {
-        if (_disposed) return;
-        _disposed = true;
-        _shutdown.Cancel();
-        if (_gate.Wait(0))
-        {
-            try { DetachAndClose(_current); _current = null; }
-            finally { _gate.Release(); }
         }
     }
 
     public async ValueTask DisposeAsync()
     {
         RequestShutdown();
-        await _gate.WaitAsync().ConfigureAwait(false);
-        _gate.Release();
+
+        Task? recovery;
+        lock (_recoveryTaskSync)
+            recovery = _recoveryTask;
+
+        if (recovery is not null)
+        {
+            try { await recovery.ConfigureAwait(false); }
+            catch (OperationCanceledException) when (_shutdown.IsCancellationRequested) { }
+        }
+
+        await CloseCurrentAfterRecoveryAsync().ConfigureAwait(false);
         _shutdown.Dispose();
         _gate.Dispose();
     }

@@ -1,4 +1,4 @@
-using WpfApplication = System.Windows.Application;
+﻿using WpfApplication = System.Windows.Application;
 using FormsContextMenuStrip = System.Windows.Forms.ContextMenuStrip;
 using FormsNotifyIcon = System.Windows.Forms.NotifyIcon;
 using FormsMouseButtons = System.Windows.Forms.MouseButtons;
@@ -7,6 +7,7 @@ using FormsToolStripSeparator = System.Windows.Forms.ToolStripSeparator;
 using DrawingSystemIcons = System.Drawing.SystemIcons;
 using TaskbarMonitor.Config;
 using TaskbarMonitor.UI;
+using TaskbarMonitor.UI.Layout;
 
 namespace TaskbarMonitor;
 
@@ -48,7 +49,9 @@ internal sealed class TrayIconService : IDisposable
     {
         // The notification area can invoke callbacks from Explorer. The menu is
         // WinForms-owned, while ConfigManager safely notifies WPF after Save.
-        _icon.ContextMenuStrip?.Show(System.Windows.Forms.Control.MousePosition);
+        _icon.ContextMenuStrip?.Dispose();
+        _icon.ContextMenuStrip = BuildTrayMenu();
+        _icon.ContextMenuStrip.Show(System.Windows.Forms.Control.MousePosition);
     }
 
     private static FormsContextMenuStrip BuildTrayMenu()
@@ -56,7 +59,7 @@ internal sealed class TrayIconService : IDisposable
         var menu = new FormsContextMenuStrip();
         menu.Items.Add(BuildChoiceMenu(
             "Layout",
-            new[] { "Compact", "TwoLine", "Grid" },
+                        new[] { nameof(WidgetLayoutKind.Grid) },
             () => ConfigManager.Instance.Config.Layout,
             value => ConfigManager.Instance.Config.Layout = value));
         menu.Items.Add(BuildChoiceMenu(
@@ -75,7 +78,7 @@ internal sealed class TrayIconService : IDisposable
         menu.Items.Add(display);
 
         menu.Items.Add(new FormsToolStripSeparator());
-        menu.Items.Add(CreateAction("Advanced settings palette…", () =>
+        menu.Items.Add(CreateAction("Advanced settings paletteâ€¦", () =>
             WpfApplication.Current?.Dispatcher.BeginInvoke(TaskbarContextMenu.ShowSettingsPalette)));
         menu.Items.Add(CreateAction("Open config.json", OpenConfig));
         menu.Items.Add(new FormsToolStripSeparator());

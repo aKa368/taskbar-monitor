@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -10,10 +10,10 @@
     <UseWindowsForms>true</UseWindowsForms>
     <RootNamespace>TaskbarMonitor</RootNamespace>
     <AssemblyName>TaskbarMonitor</AssemblyName>
-    <Version>1.0.1</Version>
-    <FileVersion>1.0.1.0</FileVersion>
-    <AssemblyVersion>1.0.1.0</AssemblyVersion>
-    <InformationalVersion>1.0.1</InformationalVersion>
+    <Version>1.0.2</Version>
+    <FileVersion>1.0.2.0</FileVersion>
+    <AssemblyVersion>1.0.2.0</AssemblyVersion>
+    <InformationalVersion>1.0.2</InformationalVersion>
     <Company>aKa368</Company>
     <Product>TaskbarMonitor</Product>
     <Description>Windows 11 taskbar system monitor</Description>
