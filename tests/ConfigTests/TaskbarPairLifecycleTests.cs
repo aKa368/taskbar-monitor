@@ -128,7 +128,7 @@ public sealed class TaskbarPairLifecycleTests
                 + (long)(System.Diagnostics.Stopwatch.Frequency * 0.35);
             while (System.Diagnostics.Stopwatch.GetTimestamp() < until)
                 System.Threading.Thread.SpinWait(20_000);
-        });
+        }, TestContext.Current.CancellationToken);
 
         await Task.Delay(25, TestContext.Current.CancellationToken);
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -206,3 +206,4 @@ public sealed class TaskbarPairLifecycleTests
         private Task Delay(CancellationToken cancellationToken) => attachDelayMs == 0 ? Task.CompletedTask : Task.Delay(attachDelayMs, cancellationToken);
     }
 }
+
