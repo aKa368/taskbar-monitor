@@ -102,19 +102,24 @@ public sealed record UsageData
 public sealed class UsagePoller : IDisposable, IAsyncDisposable
 {
     private readonly object _gate = new();
+    private readonly object _lifecycleGate = new();
     private readonly Dictionary<string, UsageData> _cache = new(StringComparer.Ordinal);
     private readonly CancellationTokenSource _cts = new();
     private readonly List<Task> _inFlight = new();
-    private readonly CommandCodeUsage _commandCode;
-    private readonly OpenCodeUsage _opencode;
-    private readonly CodexUsage _codex;
-    private readonly AntigravityUsage _antigravity;
-    private readonly ClaudeCodeUsage _claude;
-    private readonly UsagePollerOptions _options;
+    private readonly Lazy<CommandCodeUsage> _commandCode;
+    private readonly Lazy<OpenCodeUsage> _opencode;
+    private readonly Lazy<CodexUsage> _codex;
+    private readonly Lazy<AntigravityUsage> _antigravity;
+    private readonly Lazy<ClaudeCodeUsage> _claude;
+    private UsagePollerOptions _options;
     private Timer? _sqliteTimer;
     private Timer? _apiTimer;
-    private int _polling;
-    private bool _disposed;
+    private bool _started;
+    private int _sqlitePolling;
+    private int _apiPolling;
+    private int _apiRefreshPending;
+    private Task _initialApiRefresh = Task.CompletedTask;
+    private volatile bool _disposed;
 
     public UsagePoller(
         UsagePollerOptions? options = null,
@@ -125,11 +130,20 @@ public sealed class UsagePoller : IDisposable, IAsyncDisposable
         ClaudeCodeUsage? claude = null)
     {
         _options = options ?? new UsagePollerOptions();
-        _commandCode = commandCode ?? new CommandCodeUsage();
-        _opencode = openCode ?? new OpenCodeUsage();
-        _codex = codex ?? new CodexUsage();
-        _antigravity = antigravity ?? new AntigravityUsage();
-        _claude = claude ?? new ClaudeCodeUsage();
+        _commandCode = CreateProvider(commandCode, static () => new CommandCodeUsage());
+        _opencode = CreateProvider(openCode, static () => new OpenCodeUsage());
+        _codex = CreateProvider(codex, static () => new CodexUsage());
+        _antigravity = CreateProvider(antigravity, static () => new AntigravityUsage());
+        _claude = CreateProvider(claude, static () => new ClaudeCodeUsage());
+    }
+
+    private static Lazy<T> CreateProvider<T>(T? injected, Func<T> factory) where T : class
+    {
+        var provider = new Lazy<T>(() => injected ?? factory(), LazyThreadSafetyMode.ExecutionAndPublication);
+        // Preserve the existing ownership contract for injected providers:
+        // the poller disposes them even if their source remains disabled.
+        if (injected is not null) _ = provider.Value;
+        return provider;
     }
 
     public static class DefaultIntervals
@@ -141,14 +155,97 @@ public sealed class UsagePoller : IDisposable, IAsyncDisposable
     /// <summary>Starts the periodic pollers. SQLite agents poll at <see cref="UsagePollerOptions.SqlitePollInterval"/>, API agents at <see cref="UsagePollerOptions.ApiPollInterval"/>.</summary>
     public void Start()
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        if (_sqliteTimer is not null || _apiTimer is not null)
-            return;
+        lock (_lifecycleGate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (_started) return;
+            _started = true;
+            UsagePollerOptions options = Volatile.Read(ref _options);
+            StartTimersNoLock(options);
+            QueueInitialRefreshesNoLock(options, sqlite: HasSqlite(options), api: HasApi(options));
+        }
+    }
 
-        _sqliteTimer = new Timer(_ => TrackInFlight(RefreshSqliteAsync(_cts.Token)), null, TimeSpan.Zero, _options.SqlitePollInterval);
-        // Fetch immediately; waiting five minutes made the usage pods look dead
-        // after startup even when valid credentials were already present.
-        _apiTimer = new Timer(_ => TrackInFlight(RefreshApiAsync(_cts.Token)), null, TimeSpan.Zero, _options.ApiPollInterval);
+    public Task StartAsync()
+    {
+        Start();
+        return InitialApiRefresh;
+    }
+
+    public Task InitialApiRefresh
+    {
+        get { lock (_gate) return _initialApiRefresh; }
+    }
+
+    /// <summary>Applies enabled sources at runtime and immediately polls newly enabled groups.</summary>
+    public void Reconfigure(UsagePollerOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        lock (_lifecycleGate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (options == Volatile.Read(ref _options)) return;
+            bool wasRunning = _started;
+            UsagePollerOptions previous = Volatile.Read(ref _options);
+            StopTimersNoLock();
+            Volatile.Write(ref _options, options);
+            if (wasRunning)
+            {
+                StartTimersNoLock(options);
+                bool sqliteNewlyEnabled = (!previous.CommandCodeEnabled && options.CommandCodeEnabled)
+                    || (!previous.OpenCodeEnabled && options.OpenCodeEnabled);
+                bool apiNewlyEnabled = (!previous.CodexEnabled && options.CodexEnabled)
+                    || (!previous.AntigravityEnabled && options.AntigravityEnabled)
+                    || (!previous.ClaudeEnabled && options.ClaudeEnabled);
+                QueueInitialRefreshesNoLock(options, sqliteNewlyEnabled, apiNewlyEnabled);
+            }
+        }
+    }
+
+    private static bool HasSqlite(UsagePollerOptions options) => options.CommandCodeEnabled || options.OpenCodeEnabled;
+    private static bool HasApi(UsagePollerOptions options) => options.CodexEnabled || options.AntigravityEnabled || options.ClaudeEnabled;
+
+    private void QueueInitialRefreshesNoLock(UsagePollerOptions options, bool sqlite, bool api)
+    {
+        if (_disposed) return;
+        if (sqlite && HasSqlite(options)) TrackInFlight(RefreshSqliteAsync(_cts.Token));
+        if (api && HasApi(options))
+        {
+            Task task = RefreshApiAsync(_cts.Token);
+            lock (_gate) _initialApiRefresh = task;
+            TrackInFlight(task);
+        }
+    }
+
+    public Task QueueApiRefreshAsync()
+    {
+        lock (_lifecycleGate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            Task task = RefreshApiAsync(_cts.Token);
+            TrackInFlight(task);
+            return task;
+        }
+    }
+
+    private void StartTimersNoLock(UsagePollerOptions options)
+    {
+        if (options.CommandCodeEnabled || options.OpenCodeEnabled)
+            _sqliteTimer = new Timer(static state => ((UsagePoller)state!).OnSqliteTimer(), this,
+                options.SqlitePollInterval, options.SqlitePollInterval);
+        if (options.CodexEnabled || options.AntigravityEnabled || options.ClaudeEnabled)
+            _apiTimer = new Timer(static state => ((UsagePoller)state!).OnApiTimer(), this,
+                options.ApiPollInterval, options.ApiPollInterval);
+    }
+
+    private void OnSqliteTimer()
+    {
+        if (!_disposed) TrackInFlight(RefreshSqliteAsync(_cts.Token));
+    }
+
+    private void OnApiTimer()
+    {
+        if (!_disposed) TrackInFlight(RefreshApiAsync(_cts.Token));
     }
 
     /// <summary>Tracks a fire-and-forget poll so <see cref="DisposeAsync"/> can await it.</summary>
@@ -169,6 +266,15 @@ public sealed class UsagePoller : IDisposable, IAsyncDisposable
 
     public void Stop()
     {
+        lock (_lifecycleGate)
+        {
+            _started = false;
+            StopTimersNoLock();
+        }
+    }
+
+    private void StopTimersNoLock()
+    {
         _sqliteTimer?.Dispose();
         _apiTimer?.Dispose();
         _sqliteTimer = null;
@@ -178,23 +284,18 @@ public sealed class UsagePoller : IDisposable, IAsyncDisposable
     /// <summary>Polls every enabled agent once. Safe to call concurrently — only one poll runs at a time.</summary>
     public async Task RefreshOnceAsync(CancellationToken ct = default)
     {
-        if (Interlocked.CompareExchange(ref _polling, 1, 0) != 0)
-            return;
-        try
+        if (TryBeginPoll(ref _sqlitePolling))
         {
-            PollSqlite();
-            await PollApiAsync(ct).ConfigureAwait(false);
+            try { PollSqlite(); }
+            finally { Interlocked.Exchange(ref _sqlitePolling, 0); }
         }
-        finally
-        {
-            Interlocked.Exchange(ref _polling, 0);
-        }
+        await RefreshApiAsync(ct).ConfigureAwait(false);
     }
 
     public Task RefreshSqliteAsync(CancellationToken ct = default) => Task.Run(() =>
     {
         ct.ThrowIfCancellationRequested();
-        if (Interlocked.CompareExchange(ref _polling, 1, 0) != 0)
+        if (!TryBeginPoll(ref _sqlitePolling))
             return;
         try
         {
@@ -202,41 +303,64 @@ public sealed class UsagePoller : IDisposable, IAsyncDisposable
         }
         finally
         {
-            Interlocked.Exchange(ref _polling, 0);
+            Interlocked.Exchange(ref _sqlitePolling, 0);
         }
     }, ct);
 
     public async Task RefreshApiAsync(CancellationToken ct = default)
     {
-        if (Interlocked.CompareExchange(ref _polling, 1, 0) != 0)
-            return;
-        try
+        while (!_disposed)
         {
-            await PollApiAsync(ct).ConfigureAwait(false);
+            if (!TryBeginPoll(ref _apiPolling))
+            {
+                Interlocked.Exchange(ref _apiRefreshPending, 1);
+                // Close the race where the owner released between our failed
+                // acquire and publishing the pending request.
+                if (Volatile.Read(ref _apiPolling) == 0 &&
+                    Interlocked.Exchange(ref _apiRefreshPending, 0) == 1)
+                    continue;
+                return;
+            }
+            try
+            {
+                UsagePollerOptions snapshot = Volatile.Read(ref _options);
+                await PollApiAsync(snapshot, ct).ConfigureAwait(false);
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _apiPolling, 0);
+            }
+            if (_disposed || Interlocked.Exchange(ref _apiRefreshPending, 0) == 0) return;
         }
-        finally
-        {
-            Interlocked.Exchange(ref _polling, 0);
-        }
+    }
+
+    private bool TryBeginPoll(ref int polling)
+    {
+        if (_disposed || Interlocked.CompareExchange(ref polling, 1, 0) != 0)
+            return false;
+        if (!_disposed) return true;
+        Interlocked.Exchange(ref polling, 0);
+        return false;
     }
 
     private void PollSqlite()
     {
-        if (_options.CommandCodeEnabled)
-            Update(_commandCode.TryRead(out var cc) ? cc : null);
-        if (_options.OpenCodeEnabled)
-            Update(_opencode.TryRead(out var oc) ? oc : null);
+        UsagePollerOptions options = Volatile.Read(ref _options);
+        if (options.CommandCodeEnabled)
+            Update(_commandCode.Value.TryRead(out var cc) ? cc : null);
+        if (options.OpenCodeEnabled)
+            Update(_opencode.Value.TryRead(out var oc) ? oc : null);
     }
 
-    private async Task PollApiAsync(CancellationToken ct)
+    private async Task PollApiAsync(UsagePollerOptions options, CancellationToken ct)
     {
         var tasks = new List<Task<UsageData?>>(3);
-        if (_options.CodexEnabled)
-            tasks.Add(_codex.FetchAsync(now: null, ct));
-        if (_options.AntigravityEnabled)
-            tasks.Add(_antigravity.FetchAsync(now: null, ct));
-        if (_options.ClaudeEnabled)
-            tasks.Add(_claude.FetchAsync(now: null, ct));
+        if (options.CodexEnabled)
+            tasks.Add(_codex.Value.FetchAsync(now: null, ct));
+        if (options.AntigravityEnabled)
+            tasks.Add(_antigravity.Value.FetchAsync(now: null, ct));
+        if (options.ClaudeEnabled)
+            tasks.Add(_claude.Value.FetchAsync(now: null, ct));
 
         UsageData?[] results;
         try
@@ -273,9 +397,9 @@ public sealed class UsagePoller : IDisposable, IAsyncDisposable
         lock (_gate)
         {
             if (data.Error is not null &&
-                _cache.TryGetValue(data.Agent, out var previous) &&
-                previous.Error is null)
+                _cache.TryGetValue(data.Agent, out var previous))
             {
+                _cache[data.Agent] = previous with { Error = data.Error, LastUpdated = data.LastUpdated };
                 return;
             }
             _cache[data.Agent] = data;
@@ -284,14 +408,27 @@ public sealed class UsagePoller : IDisposable, IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        if (_disposed)
-            return;
-        _disposed = true;
+        Timer? sqliteTimer;
+        Timer? apiTimer;
+        lock (_lifecycleGate)
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _started = false;
+            sqliteTimer = _sqliteTimer;
+            apiTimer = _apiTimer;
+            _sqliteTimer = null;
+            _apiTimer = null;
+        }
 
         // Graceful shutdown: stop new polls, cancel in-flight HTTP requests,
         // then wait for the current poll before disposing the HTTP clients.
-        Stop();
         _cts.Cancel();
+
+        // DisposeAsync waits for callbacks that have already entered, closing
+        // the callback/TrackInFlight hand-off race before we snapshot tasks.
+        if (sqliteTimer is not null) await sqliteTimer.DisposeAsync().ConfigureAwait(false);
+        if (apiTimer is not null) await apiTimer.DisposeAsync().ConfigureAwait(false);
 
         Task[] pending;
         lock (_gate)
@@ -312,12 +449,18 @@ public sealed class UsagePoller : IDisposable, IAsyncDisposable
             }
         }
 
+        // Public one-shot refreshes are not in the timer task list. Once
+        // disposed, TryBeginPoll prevents new entrants; wait for an entrant
+        // that raced the transition before tearing down its provider.
+        while (Volatile.Read(ref _sqlitePolling) != 0 || Volatile.Read(ref _apiPolling) != 0)
+            await Task.Delay(10).ConfigureAwait(false);
+
         _cts.Dispose();
-        if (_commandCode is IDisposable c) c.Dispose();
-        if (_opencode is IDisposable o) o.Dispose();
-        if (_codex is IDisposable k) k.Dispose();
-        if (_antigravity is IDisposable a) a.Dispose();
-        if (_claude is IDisposable cl) cl.Dispose();
+        if (_commandCode.IsValueCreated) _commandCode.Value.Dispose();
+        if (_opencode.IsValueCreated) _opencode.Value.Dispose();
+        if (_codex.IsValueCreated) _codex.Value.Dispose();
+        if (_antigravity.IsValueCreated) _antigravity.Value.Dispose();
+        if (_claude.IsValueCreated) _claude.Value.Dispose();
     }
 
     /// <summary>Convenience disposal for <c>using</c> blocks.</summary>

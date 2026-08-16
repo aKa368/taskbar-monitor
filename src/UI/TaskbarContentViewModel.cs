@@ -24,19 +24,26 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
 {
     private readonly DispatcherTimer _timer;
     private readonly LayoutManager _layout = new();
-    private readonly List<IDisposable> _disposables = new();
+    private readonly List<IDisposable> _metricDisposables = new();
 
     private MetricSampler? _sampler;
     private NetworkMonitor? _network;
     private TemperatureMonitor? _temperature;
+    private string _ramTemperatureReason = "DIMM temperature unavailable";
+    private string _gpuTemperatureSource = "GPU driver exposes no temperature telemetry";
+    private string? _metricSignature;
     private UsagePoller? _poller;
+    private string? _usageInitializationError;
     private string _fontFamily = "Sarasa Fixed SC";
     private string _networkRateText = "↑ -- ↓ --";
+    private string _gridPerformanceText = string.Empty;
     private bool _disposed;
 
     public ConfigData Config => ConfigManager.Instance.Config;
 
     public ObservableCollection<PodViewModel> Pods => _layout.Pods;
+    public IReadOnlyList<AgentPodViewModel> AccountPods => Pods.OfType<AgentPodViewModel>().ToList();
+    public IReadOnlyList<MetricPodViewModel> SystemPods => Pods.OfType<MetricPodViewModel>().ToList();
     public IReadOnlyList<IReadOnlyList<PodViewModel>> Rows => _layout.Rows;
     public bool IsGrid => _layout.CurrentLayout.Name == "Grid";
     public bool IsTwoRow => _layout.IsTwoRow && !IsGrid;
@@ -74,6 +81,22 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
         private set => SetField(ref _networkRateText, value);
     }
 
+    public string GridPerformanceText
+    {
+        get => _gridPerformanceText;
+        private set => SetField(ref _gridPerformanceText, value);
+    }
+
+    public bool HasGridPerformance => Config.Metrics.Gpu;
+
+    public string GridPerformanceToolTip
+    {
+        get
+        {
+            return $"GPU utilization — busiest physical engine · Temperature: {_gpuTemperatureSource}";
+        }
+    }
+
     public TaskbarContentViewModel()
     {
         InitMetricsSampler();
@@ -83,6 +106,8 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
         _layout.LayoutChanged += (_, _) =>
         {
             OnPropertyChanged(nameof(Pods));
+            OnPropertyChanged(nameof(AccountPods));
+            OnPropertyChanged(nameof(SystemPods));
             OnPropertyChanged(nameof(Rows));
             OnPropertyChanged(nameof(IsTwoRow));
             OnPropertyChanged(nameof(IsGrid));
@@ -93,6 +118,9 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
             OnPropertyChanged(nameof(GridGpu));
             OnPropertyChanged(nameof(GridDisk));
             OnPropertyChanged(nameof(GridNetwork));
+            OnPropertyChanged(nameof(HasGridPerformance));
+            OnPropertyChanged(nameof(GridPerformanceText));
+            OnPropertyChanged(nameof(GridPerformanceToolTip));
             OnPropertyChanged(nameof(GridCodex));
             OnPropertyChanged(nameof(GridProvider));
             OnPropertyChanged(nameof(GridAgents));
@@ -115,22 +143,31 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
 
     private void InitMetricsSampler()
     {
+        string signature = $"{Config.Metrics.Cpu}:{Config.Metrics.Ram}:{Config.Metrics.Network}:{Config.Metrics.Disk}:{Config.Metrics.Gpu}:{Config.Metrics.Temperature}:{Config.Metrics.RamTemperature}";
+        if (signature == _metricSignature) return;
+        _metricSignature = signature;
+        _sampler?.Dispose();
+        _sampler = null;
+        foreach (var disposable in _metricDisposables) disposable.Dispose();
+        _metricDisposables.Clear();
+        _network = null;
+        _temperature = null;
         try
         {
             var readers = new Dictionary<string, Func<double>>();
 
-            try
+            if (Config.Metrics.Cpu) try
             {
                 var cpu = new CpuMonitor();
-                _disposables.Add(cpu);
+                _metricDisposables.Add(cpu);
                 readers["cpu"] = () => cpu.Sample().UsagePercent;
             }
             catch { readers["cpu"] = () => double.NaN; }
 
-            try
+            if (Config.Metrics.Ram) try
             {
                 var mem = new MemoryMonitor();
-                _disposables.Add(mem);
+                _metricDisposables.Add(mem);
                 // MemoryMetrics.Usage is a fraction (0..1), while the UI and
                 // chart use percentages (0..100). Keeping the conversion at
                 // the sampling boundary avoids the old "RAM 0%" display.
@@ -138,7 +175,7 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
             }
             catch { readers["ram"] = () => double.NaN; }
 
-            try
+            if (Config.Metrics.Network) try
             {
                 _network = new NetworkMonitor();
                 readers["netUp"] = () => _network.SampleCached().SentBytesPerSecond / 1024.0;
@@ -150,10 +187,10 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
                 readers["netDown"] = () => double.NaN;
             }
 
-            try
+            if (Config.Metrics.Disk) try
             {
                 var disk = new DiskMonitor();
-                _disposables.Add(disk);
+                _metricDisposables.Add(disk);
                 var diskReader = new ThrottledMetricReader(
                     () =>
                     {
@@ -165,34 +202,66 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
             }
             catch { readers["disk"] = () => double.NaN; }
 
-            try
+            if (Config.Metrics.Gpu) try
             {
                 var gpu = new GpuMonitor();
-                _disposables.Add(gpu);
+                _metricDisposables.Add(gpu);
                 var gpuReader = new ThrottledMetricReader(gpu.Sample, TimeSpan.FromSeconds(5));
                 readers["gpu"] = gpuReader.Read;
             }
             catch { readers["gpu"] = () => double.NaN; }
 
-            try
+            if (Config.Metrics.Gpu && Config.Metrics.Temperature) try
+            {
+                var gpuTemperature = new GpuTemperatureMonitor();
+                _metricDisposables.Add(gpuTemperature);
+                var gpuTemperatureReader = new ThrottledMetricReader(() =>
+                {
+                    double value = gpuTemperature.SampleCelsius();
+                    _gpuTemperatureSource = gpuTemperature.SourceDescription;
+                    return value;
+                }, TimeSpan.FromSeconds(8));
+                readers["gpuTemperature"] = gpuTemperatureReader.Read;
+            }
+            catch { readers["gpuTemperature"] = () => double.NaN; }
+
+            if (Config.Metrics.Temperature && Config.Metrics.Cpu) try
             {
                 _temperature = new TemperatureMonitor();
-                _disposables.Add(_temperature);
+                _metricDisposables.Add(_temperature);
                 var temperatureReader = new ThrottledMetricReader(_temperature.SampleCelsius, TimeSpan.FromSeconds(10));
                 readers["temperature"] = temperatureReader.Read;
             }
             catch { readers["temperature"] = () => double.NaN; }
 
+            if (Config.Metrics.Ram && Config.Metrics.Temperature && Config.Metrics.RamTemperature)
+            {
+                var ramTemperature = new RamTemperatureMonitor();
+                _metricDisposables.Add(ramTemperature);
+                readers["ramTemperature"] = () =>
+                {
+                    RamTemperatureReading reading = ramTemperature.Sample();
+                    _ramTemperatureReason = reading.Reason;
+                    return reading.Celsius;
+                };
+            }
+
             // GPU thermal libraries often need privileged driver access. This
             // user-mode widget intentionally does not load hardware drivers;
             // lack of a trusted sensor is shown as --°C.
-            readers["gpuTemperature"] = () => double.NaN;
 
             // Native counters and adapter enumeration are already cached by the
-            // UI; a two-second sampling cadence keeps the widget responsive
-            // while avoiding a permanent 1 Hz native-counter wake-up.
-            _sampler = new MetricSampler(readers, 2000, 60);
-            _sampler.Start();
+            // UI; a 2.5-second sampling cadence keeps the widget responsive
+            // while avoiding unnecessary native-counter wake-ups.
+            if (readers.Count > 0)
+            {
+                _sampler = new MetricSampler(readers, 2500, 2);
+                // External GPU telemetry may take up to its process timeout.
+                // Prime lightweight counters synchronously; the timer performs
+                // the first GPU-temperature read on its worker thread.
+                _sampler.SampleNow(static key => key != "gpuTemperature");
+                _sampler.Start();
+            }
         }
         catch
         {
@@ -202,36 +271,70 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
 
     private void InitUsagePoller()
     {
+        UsagePoller? poller = null;
         try
         {
-            var options = new UsagePollerOptions
+            var options = CreatePollerOptions(Config);
+            poller = new UsagePoller(options);
+            _poller = poller;
+            try
             {
-                CommandCodeEnabled = Config.Agents.CommandCode,
-                OpenCodeEnabled = Config.Agents.OpenCode,
-                CodexEnabled = Config.Agents.Codex,
-                AntigravityEnabled = Config.Agents.Antigravity,
-                ClaudeEnabled = Config.Agents.Claude
-            };
-            _poller = new UsagePoller(options);
-            _disposables.Add(_poller);
-            _poller.Start();
+                Task initial = poller.StartAsync();
+                _ = ObserveUsageStartupAsync(poller, initial);
+            }
+            catch (Exception ex)
+            {
+                _usageInitializationError = $"Usage polling could not start ({ex.GetType().Name}).";
+                _ = ObserveUsageStartupAsync(poller, Task.CompletedTask);
+            }
         }
-        catch
+        catch (Exception ex)
         {
             _poller = null;
+            poller?.Dispose();
+            _usageInitializationError = $"Usage polling could not initialize ({ex.GetType().Name}).";
         }
+    }
+
+    private async Task ObserveUsageStartupAsync(UsagePoller poller, Task initial)
+    {
+        try
+        {
+            await initial.WaitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
+            if (Config.Agents.Codex && poller.Get(AgentIds.Codex) is null)
+                await poller.QueueApiRefreshAsync().WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _usageInitializationError = $"ChatGPT usage refresh did not complete ({ex.GetType().Name}).";
+        }
+
+        if (Config.Agents.Codex && poller.Get(AgentIds.Codex) is null)
+            _usageInitializationError ??= "ChatGPT usage refresh did not produce a result.";
+        App.Current?.Dispatcher.BeginInvoke(() => Tick());
     }
 
     private void OnConfigReloaded(object? sender, ConfigData newConfig)
     {
         App.Current?.Dispatcher.InvokeAsync(() =>
         {
+            InitMetricsSampler();
+            _poller?.Reconfigure(CreatePollerOptions(newConfig));
             ApplyConfigSettings(forceRebuild: true); // config reload → ép rebuild pods
             _timer.Interval = TimeSpan.FromSeconds(Math.Max(1, newConfig.UpdateIntervalSeconds));
             OnPropertyChanged(string.Empty);
             Tick();
         });
     }
+
+    private static UsagePollerOptions CreatePollerOptions(ConfigData config) => new()
+    {
+        CommandCodeEnabled = config.Agents.CommandCode,
+        OpenCodeEnabled = config.Agents.OpenCode,
+        CodexEnabled = config.Agents.Codex,
+        AntigravityEnabled = config.Agents.Antigravity,
+        ClaudeEnabled = config.Agents.Claude
+    };
 
     private void ApplyConfigSettings(bool forceRebuild = false)
     {
@@ -267,18 +370,23 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
 
     private void UpdateMetrics()
     {
-        var metricPods = Pods.OfType<MetricPodViewModel>().ToList();
-        if (metricPods.Count == 0) return;
+        var metricPods = Pods.OfType<MetricPodViewModel>();
+        if (!metricPods.Any()) return;
 
-        float cpu = ReadMetric("cpu");
-        float ram = ReadMetric("ram");
-        float netUp = ReadMetric("netUp");
-        float netDown = ReadMetric("netDown");
-        float disk = ReadMetric("disk");
-        float gpu = ReadMetric("gpu");
+        float cpu = Config.Metrics.Cpu ? ReadMetric("cpu") : float.NaN;
+        float ram = Config.Metrics.Ram ? ReadMetric("ram") : float.NaN;
+        float ramTemperature = Config.Metrics.RamTemperature ? ReadMetric("ramTemperature") : float.NaN;
+        float netUp = Config.Metrics.Network ? ReadMetric("netUp") : float.NaN;
+        float netDown = Config.Metrics.Network ? ReadMetric("netDown") : float.NaN;
+        float disk = Config.Metrics.Disk ? ReadMetric("disk") : float.NaN;
+        float gpu = Config.Metrics.Gpu ? ReadMetric("gpu") : float.NaN;
         float cpuTemperature = Config.Metrics.Temperature ? ReadMetric("temperature") : float.NaN;
         float gpuTemperature = Config.Metrics.Temperature ? ReadMetric("gpuTemperature") : float.NaN;
         NetworkRateText = NetworkRateTextFormatter.FormatPair(netUp, netDown);
+        GridPerformanceText = GridPerformanceTextFormatter.Format(
+            Config.Metrics.Gpu, gpu,
+            Config.Metrics.Temperature, gpuTemperature);
+        OnPropertyChanged(nameof(GridPerformanceToolTip));
 
         foreach (var pod in metricPods)
         {
@@ -291,10 +399,16 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
                     text = float.IsFinite(value) && cpuTemperature > 0
                         ? $"CPU {value:F0}% · {cpuTemperature:F0}°C"
                         : float.IsFinite(value) ? $"CPU {value:F0}% · --°C" : "CPU -- · --°C";
+                    pod.ToolTipText = Config.Metrics.Temperature
+                        ? _temperature?.SourceDescription ?? "Windows thermal zone unavailable"
+                        : "CPU temperature disabled";
                     break;
                 case "ram":
                     value = ram;
-                    text = float.IsFinite(value) ? $"RAM {value:F0}%" : "RAM --";
+                    text = Config.Metrics.Temperature && Config.Metrics.RamTemperature
+                        ? float.IsFinite(value) ? $"RAM {value:F0}% · {(float.IsFinite(ramTemperature) ? $"{ramTemperature:F0}°C" : "--°C")}" : "RAM -- · --°C"
+                        : float.IsFinite(value) ? $"RAM {value:F0}%" : "RAM --";
+                    pod.ToolTipText = Config.Metrics.RamTemperature ? _ramTemperatureReason : "RAM utilization";
                     break;
                 case "network":
                     value = float.IsFinite(netUp) && float.IsFinite(netDown)
@@ -310,6 +424,7 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
                     text = float.IsFinite(gpu) && gpuTemperature > 0
                         ? $"GPU {gpu:F0}% · {gpuTemperature:F0}°C"
                         : float.IsFinite(gpu) ? $"GPU {gpu:F0}% · --°C" : "GPU -- · --°C";
+                    pod.ToolTipText = Config.Metrics.Temperature ? _gpuTemperatureSource : "GPU temperature disabled";
                     break;
                 default:
                     value = 0;
@@ -324,8 +439,8 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
 
     private void UpdateAgents()
     {
-        var agentPods = Pods.OfType<AgentPodViewModel>().ToList();
-        if (agentPods.Count == 0) return;
+        var agentPods = Pods.OfType<AgentPodViewModel>();
+        if (!agentPods.Any()) return;
 
         bool showReset = Config.ShowResetCountdown && _layout.CurrentLayout.ShowAgentResetText;
         bool showLabels = Config.ShowLabels;
@@ -354,15 +469,30 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
                 }
                 else
                 {
-                    valueText = UsageTextFormatter.FormatQuotaPercent(pct5h, showReset, reset5h);
+                    valueText = UsageTextFormatter.FormatBestQuota(pct5h, reset5h, pct7d, reset7d, showReset);
                 }
             }
 
+            if (data?.Error is not null)
+                valueText = valueText == "--" ? "ERR" : $"{valueText} · ERR";
+            else if (data is null && pod.Key == "Codex" && _usageInitializationError is not null)
+                valueText = "ERR";
+            valueText = UsageTextFormatter.FormatCompactAgentDisplay(data,
+                diagnosticFailed: pod.Key == "Codex" && _usageInitializationError is not null);
             pod.ValueText = valueText;
             pod.FiveHourPercentage = pct5h ?? double.NaN;
             pod.SevenDayPercentage = pct7d ?? double.NaN;
             pod.FiveHourResetText = UsageTextFormatter.FormatResetTime(reset5h);
             pod.SevenDayResetText = UsageTextFormatter.FormatResetTime(reset7d);
+            string fullValue = UsageTextFormatter.FormatAgentDisplay(data, showReset,
+                diagnosticFailed: pod.Key == "Codex" && _usageInitializationError is not null);
+            pod.ToolTipText = data?.Error is { Length: > 0 } error
+                ? $"{fullValue}\nLast update failed: {error}"
+                : data is null && pod.Key == "Codex" && _usageInitializationError is not null
+                    ? _usageInitializationError
+                : data?.LastUpdated is { } updated
+                    ? $"{fullValue}\nUpdated {updated.LocalDateTime:g}"
+                    : "Waiting for the first usage update";
 
 
         }
@@ -386,8 +516,8 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
         {
             try
             {
-                var hist = _sampler.GetHistory(key);
-                if (hist.Count > 0) return (float)hist[^1];
+                double latest = _sampler.GetLatest(key);
+                if (double.IsFinite(latest)) return (float)latest;
             }
             catch (Exception ex)
             {
@@ -429,7 +559,8 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
         _disposed = true;
         _timer.Stop();
         ConfigManager.Instance.ConfigReloaded -= OnConfigReloaded;
-        foreach (var d in _disposables)
+        _poller?.Dispose();
+        foreach (var d in _metricDisposables)
         {
             try { d.Dispose(); }
             catch (Exception ex) { Diagnostics.ReportReaderFailure("disposable", ex); }

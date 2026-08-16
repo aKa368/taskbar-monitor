@@ -19,6 +19,7 @@ public class SettingsPaletteViewModelTests
     {
         var (vm, _, _) = MakeVm();
         Assert.Contains(vm.Commands, c => c.Id == "toggle-metric-cpu");
+        Assert.DoesNotContain(vm.Commands, c => c.Id == "toggle-metric-power");
         Assert.Contains(vm.Commands, c => c.Id == "toggle-agent-codex" && c.Label == "Agent: ChatGPT Usage");
         Assert.Contains(vm.Commands, c => c.Id == "choose-layout-TwoLine");
         Assert.Contains(vm.Commands, c => c.Id == "set-interval-1");

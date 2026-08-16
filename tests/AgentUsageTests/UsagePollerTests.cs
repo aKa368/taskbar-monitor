@@ -101,7 +101,7 @@ public sealed class UsagePollerTests
             await poller.RefreshOnceAsync(TestContext.Current.CancellationToken);
             var afterFailure = poller.Get(AgentIds.Codex);
             Assert.NotNull(afterFailure);
-            Assert.Null(afterFailure!.Error);
+            Assert.NotNull(afterFailure!.Error);
             Assert.Equal(12, afterFailure.UsedPercent5h); // last known good preserved
         }
         finally
@@ -150,6 +150,236 @@ public sealed class UsagePollerTests
         {
             TestDb.Delete(ccDb);
         }
+    }
+
+    [Fact]
+    public async Task ReconfigureEnablesCodexWithoutRecreatingPoller()
+    {
+        string authPath = WriteCodexAuth();
+        try
+        {
+            var handler = new StubHttpHandler().On("GET", "/backend-api/wham/usage", (200, CodexPayload));
+            using var codex = new CodexUsage(handler, authPath);
+            using var poller = new UsagePoller(
+                new UsagePollerOptions { CommandCodeEnabled = false, OpenCodeEnabled = false, CodexEnabled = false, AntigravityEnabled = false, ClaudeEnabled = false },
+                codex: codex);
+
+            await poller.RefreshOnceAsync(TestContext.Current.CancellationToken);
+            Assert.Null(poller.Get(AgentIds.Codex));
+
+            poller.Reconfigure(new UsagePollerOptions { CommandCodeEnabled = false, OpenCodeEnabled = false, CodexEnabled = true, AntigravityEnabled = false, ClaudeEnabled = false });
+            await poller.RefreshOnceAsync(TestContext.Current.CancellationToken);
+
+            Assert.Equal(12, poller.Get(AgentIds.Codex)?.UsedPercent5h);
+            Assert.Equal(1, handler.RequestCount);
+        }
+        finally
+        {
+            TestDb.Delete(authPath);
+        }
+    }
+
+    [Fact]
+    public async Task ReconfigureStartsNewlyEnabledGroupAfterStartingWithEverythingDisabled()
+    {
+        string authPath = WriteCodexAuth();
+        try
+        {
+            var handler = new StubHttpHandler().On("GET", "/backend-api/wham/usage", (200, CodexPayload));
+            using var codex = new CodexUsage(handler, authPath);
+            await using var poller = new UsagePoller(
+                new UsagePollerOptions
+                {
+                    CommandCodeEnabled = false, OpenCodeEnabled = false, CodexEnabled = false,
+                    AntigravityEnabled = false, ClaudeEnabled = false,
+                    ApiPollInterval = TimeSpan.FromHours(1)
+                }, codex: codex);
+
+            poller.Start();
+            poller.Reconfigure(new UsagePollerOptions
+            {
+                CommandCodeEnabled = false, OpenCodeEnabled = false, CodexEnabled = true,
+                AntigravityEnabled = false, ClaudeEnabled = false,
+                ApiPollInterval = TimeSpan.FromHours(1)
+            });
+
+            await WaitUntilAsync(() => handler.RequestCount == 1);
+            Assert.Equal(12, poller.Get(AgentIds.Codex)?.UsedPercent5h);
+        }
+        finally
+        {
+            TestDb.Delete(authPath);
+        }
+    }
+
+    [Fact]
+    public async Task StartExplicitlyRefreshesApiBeforeLongTimerInterval()
+    {
+        string authPath = WriteCodexAuth();
+        try
+        {
+            var handler = new StubHttpHandler().On("GET", "/backend-api/wham/usage", (200, CodexPayload));
+            using var codex = new CodexUsage(handler, authPath);
+            await using var poller = new UsagePoller(new UsagePollerOptions
+            {
+                CommandCodeEnabled = false, OpenCodeEnabled = false, CodexEnabled = true,
+                AntigravityEnabled = false, ClaudeEnabled = false,
+                ApiPollInterval = TimeSpan.FromHours(1)
+            }, codex: codex);
+
+            poller.Start();
+
+            await WaitUntilAsync(() => poller.Get(AgentIds.Codex) is not null);
+            Assert.Equal(1, handler.RequestCount);
+            Assert.Equal(12, poller.Get(AgentIds.Codex)?.UsedPercent5h);
+        }
+        finally { TestDb.Delete(authPath); }
+    }
+
+    [Fact]
+    public async Task StartAsyncCompletionRepresentsInitialApiRefresh()
+    {
+        string authPath = WriteCodexAuth();
+        var slow = new SlowHttpHandler(TimeSpan.FromMilliseconds(250), (200, CodexPayload), honorCancellation: true);
+        try
+        {
+            using var codex = new CodexUsage(slow, authPath);
+            await using var poller = new UsagePoller(new UsagePollerOptions
+            {
+                CommandCodeEnabled = false, OpenCodeEnabled = false, CodexEnabled = true,
+                AntigravityEnabled = false, ClaudeEnabled = false, ApiPollInterval = TimeSpan.FromHours(1)
+            }, codex: codex);
+
+            Task initial = poller.StartAsync();
+            await slow.FirstRequestStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            Assert.False(initial.IsCompleted);
+            await initial.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            Assert.Equal(12, poller.Get(AgentIds.Codex)?.UsedPercent5h);
+        }
+        finally { TestDb.Delete(authPath); }
+    }
+
+    [Fact]
+    public async Task BlockedSqliteInitialRefreshDoesNotDelayApiInitialRefresh()
+    {
+        string db = TestDb.CreateUsageHistoryDb("commandcode",
+            [(TestDb.IsoUtc(DateTimeOffset.UtcNow.AddMinutes(-1)), 10, 5, 0.10, "ok")]);
+        string authPath = WriteCodexAuth();
+        try
+        {
+            using var fileLock = new FileStream(db, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+            var handler = new StubHttpHandler().On("GET", "/backend-api/wham/usage", (200, CodexPayload));
+            using var commandCode = new CommandCodeUsage(db);
+            using var codex = new CodexUsage(handler, authPath);
+            await using var poller = new UsagePoller(new UsagePollerOptions
+            {
+                CommandCodeEnabled = true, OpenCodeEnabled = false, CodexEnabled = true,
+                AntigravityEnabled = false, ClaudeEnabled = false,
+                SqlitePollInterval = TimeSpan.FromHours(1), ApiPollInterval = TimeSpan.FromHours(1)
+            }, commandCode: commandCode, codex: codex);
+
+            poller.Start();
+            await WaitUntilAsync(() => poller.Get(AgentIds.Codex) is not null);
+
+            Assert.Equal(1, handler.RequestCount);
+            Assert.Null(poller.Get(AgentIds.CommandCode));
+        }
+        finally
+        {
+            TestDb.Delete(db);
+            TestDb.Delete(authPath);
+        }
+    }
+
+    [Fact]
+    public async Task StartupPollsSqliteWhileApiRequestIsInFlight()
+    {
+        string db = TestDb.CreateUsageHistoryDb("commandcode",
+            [(TestDb.IsoUtc(DateTimeOffset.UtcNow.AddMinutes(-1)), 10, 5, 0.10, "ok")]);
+        string authPath = WriteCodexAuth();
+        var slowApi = new SlowHttpHandler(TimeSpan.FromMilliseconds(600), (200, CodexPayload), honorCancellation: true);
+        try
+        {
+            using var commandCode = new CommandCodeUsage(db);
+            using var codex = new CodexUsage(slowApi, authPath);
+            await using var poller = new UsagePoller(new UsagePollerOptions
+            {
+                CommandCodeEnabled = true, OpenCodeEnabled = false, CodexEnabled = true,
+                AntigravityEnabled = false, ClaudeEnabled = false,
+                SqlitePollInterval = TimeSpan.FromHours(1), ApiPollInterval = TimeSpan.FromHours(1)
+            }, commandCode: commandCode, codex: codex);
+
+            poller.Start();
+            await slowApi.FirstRequestStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            await WaitUntilAsync(() => poller.Get(AgentIds.CommandCode) is not null);
+
+            Assert.Equal(0, slowApi.CompletedRequests);
+            Assert.NotNull(poller.Get(AgentIds.CommandCode));
+        }
+        finally
+        {
+            TestDb.Delete(db);
+            TestDb.Delete(authPath);
+        }
+    }
+
+    [Fact]
+    public async Task HotEnableQueuesOneImmediateApiRefreshBehindInFlightPoll()
+    {
+        string authPath = WriteCodexAuth();
+        var slowOld = new SlowHttpHandler(TimeSpan.FromMilliseconds(350), (200, QuotaSummaryPayload), honorCancellation: true);
+        var codexHandler = new StubHttpHandler().On("GET", "/backend-api/wham/usage", (200, CodexPayload));
+        try
+        {
+            using var antigravity = new AntigravityUsage(slowOld, credentialReader: () => FakeAntigravityCredential);
+            using var codex = new CodexUsage(codexHandler, authPath);
+            await using var poller = new UsagePoller(new UsagePollerOptions
+            {
+                CommandCodeEnabled = false, OpenCodeEnabled = false, CodexEnabled = false,
+                AntigravityEnabled = true, ClaudeEnabled = false, ApiPollInterval = TimeSpan.FromHours(1)
+            }, codex: codex, antigravity: antigravity);
+            poller.Start();
+            await slowOld.FirstRequestStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+
+            poller.Reconfigure(new UsagePollerOptions
+            {
+                CommandCodeEnabled = false, OpenCodeEnabled = false, CodexEnabled = true,
+                AntigravityEnabled = true, ClaudeEnabled = false, ApiPollInterval = TimeSpan.FromHours(1)
+            });
+
+            await WaitUntilAsync(() => poller.Get(AgentIds.Codex) is not null);
+            Assert.Equal(1, codexHandler.RequestCount);
+        }
+        finally { TestDb.Delete(authPath); }
+    }
+
+    [Fact]
+    public async Task DisposeDropsPendingHotEnableRefresh()
+    {
+        string authPath = WriteCodexAuth();
+        var hangingOld = new SlowHttpHandler(TimeSpan.FromSeconds(30), (200, QuotaSummaryPayload), honorCancellation: true);
+        var codexHandler = new StubHttpHandler().On("GET", "/backend-api/wham/usage", (200, CodexPayload));
+        try
+        {
+            using var antigravity = new AntigravityUsage(hangingOld, credentialReader: () => FakeAntigravityCredential);
+            using var codex = new CodexUsage(codexHandler, authPath);
+            var poller = new UsagePoller(new UsagePollerOptions
+            {
+                CommandCodeEnabled = false, OpenCodeEnabled = false, CodexEnabled = false,
+                AntigravityEnabled = true, ClaudeEnabled = false, ApiPollInterval = TimeSpan.FromHours(1)
+            }, codex: codex, antigravity: antigravity);
+            poller.Start();
+            await hangingOld.FirstRequestStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            poller.Reconfigure(new UsagePollerOptions
+            {
+                CommandCodeEnabled = false, OpenCodeEnabled = false, CodexEnabled = true,
+                AntigravityEnabled = true, ClaudeEnabled = false, ApiPollInterval = TimeSpan.FromHours(1)
+            });
+            await Task.Delay(50, TestContext.Current.CancellationToken);
+            await poller.DisposeAsync();
+            Assert.Equal(0, codexHandler.RequestCount);
+        }
+        finally { TestDb.Delete(authPath); }
     }
 
     [Fact]
@@ -242,6 +472,12 @@ public sealed class UsagePollerTests
         File.WriteAllText(path,
             "{\"tokens\":{\"access_token\":\"poller-fake-token-123456\",\"account_id\":\"acct-1\"}}");
         return path;
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        while (!condition()) await Task.Delay(10, timeout.Token);
     }
 
     private const string QuotaSummaryPayload = """

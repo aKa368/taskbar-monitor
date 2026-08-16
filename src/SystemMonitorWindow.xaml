@@ -1,0 +1,10 @@
+<Window x:Class="TaskbarMonitor.SystemMonitorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="TaskbarMonitor System" Width="360" Height="48"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        ShowInTaskbar="False" ShowActivated="False">
+  <Grid x:Name="Root" Background="Transparent" ClipToBounds="True" UseLayoutRounding="True" SnapsToDevicePixels="True">
+    <ContentControl x:Name="SystemHost" VerticalContentAlignment="Stretch" HorizontalContentAlignment="Stretch" />
+  </Grid>
+</Window>

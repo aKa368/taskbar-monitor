@@ -21,6 +21,7 @@ public abstract class PodViewModel : INotifyPropertyChanged
     private string _label = "";
     private string _valueText = "";
     private bool _isVisible = true;
+    private string _toolTipText = "";
 
     public PodKind Kind { get; protected init; }
 
@@ -49,6 +50,12 @@ public abstract class PodViewModel : INotifyPropertyChanged
     {
         get => _isVisible;
         set => SetField(ref _isVisible, value);
+    }
+
+    public string ToolTipText
+    {
+        get => _toolTipText;
+        set => SetField(ref _toolTipText, value);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;

@@ -48,7 +48,8 @@ public sealed class LayoutManager
             && _currentConfig.Metrics.Network == config.Metrics.Network
             && _currentConfig.Metrics.Disk == config.Metrics.Disk
             && _currentConfig.Metrics.Gpu == config.Metrics.Gpu
-            && _currentConfig.Metrics.Temperature == config.Metrics.Temperature;
+            && _currentConfig.Metrics.Temperature == config.Metrics.Temperature
+            && _currentConfig.Metrics.RamTemperature == config.Metrics.RamTemperature;
 
         if (!forceRebuild
             && _currentKind == kind

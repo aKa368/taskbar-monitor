@@ -1,11 +1,12 @@
-﻿{
+{
   "metrics": {
     "cpu": true,
     "ram": true,
     "network": true,
     "disk": false,
     "gpu": true,
-    "temperature": true
+    "temperature": true,
+    "ramTemperature": false
   },
   "agents": {
     "commandcode": true,

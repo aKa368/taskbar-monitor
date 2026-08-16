@@ -20,10 +20,17 @@
 
   <ItemGroup>
 
-    <PackageReference Include="Deskband11Lib.Wpf" />
+    <ProjectReference Include="ThirdParty\Deskband11Lib\Deskband11Lib.Wpf\Deskband11Lib.Wpf.csproj" />
     <PackageReference Include="Microsoft.Data.Sqlite" />
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />
     <PackageReference Include="System.Management" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Vendored projects build independently; exclude them from the app's default source globs. -->
+    <Compile Remove="ThirdParty\**\*.cs" />
+    <EmbeddedResource Remove="ThirdParty\**\*" />
+    <Page Remove="ThirdParty\**\*.xaml" />
   </ItemGroup>
 
   <!-- Tests reference the real assembly and are granted access to internal
@@ -31,6 +38,8 @@
   <ItemGroup>
     <InternalsVisibleTo Include="AgentUsageTests" />
     <InternalsVisibleTo Include="MetricsTests" />
+    <InternalsVisibleTo Include="ConfigTests" />
+    <InternalsVisibleTo Include="LayoutTests" />
   </ItemGroup>
 
   <ItemGroup>

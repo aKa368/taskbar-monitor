@@ -48,14 +48,6 @@
           "xunit.v3.mtp-v1": "[3.2.2]"
         }
       },
-      "Deskband11Lib.Core": {
-        "type": "Transitive",
-        "resolved": "1.3.9",
-        "contentHash": "uxJvztTPNQg2NalFPdgQWGTjaR43PbJFsjVVOaeIInU+Y3IoppZJoif+Ixfjcvdx2i5vJcA+VqDpbSDKUqbUFg==",
-        "dependencies": {
-          "Microsoft.Windows.SDK.BuildTools": "10.0.28000.1839"
-        }
-      },
       "Microsoft.ApplicationInsights": {
         "type": "Transitive",
         "resolved": "2.23.0",
@@ -228,6 +220,18 @@
           "xunit.v3.runner.common": "[3.2.2]"
         }
       },
+      "deskband11lib.core": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.Windows.SDK.BuildTools": "[10.0.28000.1839, )"
+        }
+      },
+      "deskband11lib.wpf": {
+        "type": "Project",
+        "dependencies": {
+          "Deskband11Lib.Core": "[1.3.9, )"
+        }
+      },
       "taskbarmonitor": {
         "type": "Project",
         "dependencies": {
@@ -235,15 +239,6 @@
           "Microsoft.Data.Sqlite": "[10.0.0, )",
           "SQLitePCLRaw.bundle_e_sqlite3": "[2.1.12, )",
           "System.Management": "[10.0.0, )"
-        }
-      },
-      "Deskband11Lib.Wpf": {
-        "type": "CentralTransitive",
-        "requested": "[1.3.9, )",
-        "resolved": "1.3.9",
-        "contentHash": "77MD4uNCf+I4VdmbfQ6eEwoCpb7sEtHC19rEGMEF9v+rwkI7U38LzXw7ZkqzdiA62cT3sS1PoR8FYUEAIxE7Gg==",
-        "dependencies": {
-          "Deskband11Lib.Core": "1.3.9"
         }
       },
       "System.Management": {
