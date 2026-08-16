@@ -77,7 +77,8 @@ public sealed class MetricsCoreTests
     {
         Assert.False(TemperatureMonitor.IsPlausibleCpuTemperature(20, 100));
         Assert.True(TemperatureMonitor.IsPlausibleCpuTemperature(75, 100));
-        Assert.True(TemperatureMonitor.IsPlausibleCpuTemperature(20, 40));
+        Assert.False(TemperatureMonitor.IsPlausibleCpuTemperature(20, 40));
+          Assert.True(TemperatureMonitor.IsPlausibleCpuTemperature(35, 40));
     }
 
 
@@ -254,6 +255,33 @@ public sealed class MetricsCoreTests
         Assert.Equal(0, monitor.Sample());
     }
 
+    [Fact]
+    public void GpuSampleReturnsNaNAfterTwoConsecutiveInvalidSnapshots()
+    {
+        int calls = 0;
+        using var monitor = new GpuMonitor(() =>
+            ++calls == 1
+                ? new[] { ("engine", 100d) }
+                : new[] { ("engine", double.NaN) });
+        Assert.Equal(100, monitor.Sample());
+        Assert.Equal(100, monitor.Sample());
+        Assert.True(double.IsNaN(monitor.Sample()));
+    }
+    [Fact]
+    public void GpuSampleHandlesAlternatingValidAndInvalidSnapshotsAcrossCycles()
+    {
+        int calls = 0;
+        double[] values = { 80d, double.NaN, 60d, double.NaN, 40d, double.NaN, double.NaN };
+        using var monitor = new GpuMonitor(() =>
+            new[] { ("engine", values[calls++]) });
+        Assert.Equal(80, monitor.Sample());
+        Assert.Equal(80, monitor.Sample());
+        Assert.Equal(60, monitor.Sample());
+        Assert.Equal(60, monitor.Sample());
+        Assert.Equal(40, monitor.Sample());
+        Assert.Equal(40, monitor.Sample());
+        Assert.True(double.IsNaN(monitor.Sample()));
+    }
     [Fact]
     public void GpuReturnsUnavailableWhenNoFiniteSamplesExist()
     {
