@@ -83,22 +83,33 @@ public sealed class MetricRingBuffer
 /// <summary>Samples independent metrics without allowing timer callbacks to overlap.</summary>
 public sealed class MetricSampler : IDisposable
 {
-    private readonly System.Timers.Timer _timer;
+    private readonly System.Timers.Timer? _timer;
+    private IDisposable? _sharedSubscription;
     private readonly IReadOnlyDictionary<string, Func<double>> _readers;
     private readonly Dictionary<string, MetricRingBuffer> _histories;
     private int _sampling;
 
-    public MetricSampler(IReadOnlyDictionary<string, Func<double>> readers, double intervalMilliseconds = 1000, int historyCapacity = 60)
+    public MetricSampler(IReadOnlyDictionary<string, Func<double>> readers, double intervalMilliseconds = 1000, int historyCapacity = 60, bool useSharedClock = false)
     {
         _readers = readers ?? throw new ArgumentNullException(nameof(readers));
         _histories = readers.Keys.ToDictionary(k => k, _ => new MetricRingBuffer(historyCapacity));
-        _timer = new System.Timers.Timer(intervalMilliseconds) { AutoReset = true };
-        _timer.Elapsed += OnElapsed;
+        if (useSharedClock)
+            _sharedSubscription = SharedMetricSamplerClock.Subscribe(SampleNow);
+        else
+        {
+            _timer = new System.Timers.Timer(intervalMilliseconds) { AutoReset = true };
+            _timer.Elapsed += OnElapsed;
+        }
     }
 
-    public bool IsRunning => _timer.Enabled;
-    public void Start() => _timer.Start();
-    public void Stop() => _timer.Stop();
+    public bool IsRunning => _sharedSubscription is not null || (_timer?.Enabled ?? false);
+    public void Start() => _timer?.Start();
+    public void Stop()
+    {
+        _timer?.Stop();
+        _sharedSubscription?.Dispose();
+        _sharedSubscription = null;
+    }
     public IReadOnlyList<double> GetHistory(string metric) => _histories[metric].Snapshot();
     public double GetLatest(string metric) => _histories[metric].Latest();
 
@@ -140,8 +151,11 @@ public sealed class MetricSampler : IDisposable
 
     public void Dispose()
     {
-        _timer.Stop();
-        _timer.Elapsed -= OnElapsed;
-        _timer.Dispose();
+        Stop();
+        if (_timer is not null)
+        {
+            _timer.Elapsed -= OnElapsed;
+            _timer.Dispose();
+        }
     }
 }

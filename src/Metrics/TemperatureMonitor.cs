@@ -81,6 +81,11 @@ public sealed class TemperatureMonitor : IDisposable
                 _lastValue = double.NaN;
             }
         }
+        else
+        {
+            SourceDescription = "CPU temperature unavailable: no valid thermal provider";
+            _lastValue = double.NaN;
+        }
 
         return _lastValue;
     }

@@ -15,6 +15,7 @@ public sealed class GpuMonitor : IDisposable
     private readonly TimeProvider _timeProvider;
     private readonly TimeSpan _refreshInterval;
     private List<GpuCounter> _counters = [];
+    private string _counterTopologySignature = string.Empty;
     private long _nextRefreshTimestamp;
     private double _lastFiniteSample = double.NaN;
     private bool _heldTransientGap;
@@ -129,48 +130,96 @@ public sealed class GpuMonitor : IDisposable
         long now = _timeProvider.GetTimestamp();
         if (!force && now < Volatile.Read(ref _nextRefreshTimestamp)) return;
 
-        List<GpuCounter> discovered = [];
+        string[] instanceNames = [];
+        string topologySignature = string.Empty;
         try
         {
             var category = new PerformanceCounterCategory("GPU Engine");
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (string instance in category.GetInstanceNames())
             {
-                if (string.IsNullOrWhiteSpace(instance)) continue;
-                try
-                {
-                    var counter = new PerformanceCounter(
-                        category.CategoryName,
-                        "Utilization Percentage",
-                        instance,
-                        readOnly: true);
-                    discovered.Add(new GpuCounter(instance, counter));
-                }
-                catch (Exception ex)
-                {
-                    Diagnostics.ReportReaderFailure("gpu.counter.init", ex);
-                }
+                if (!string.IsNullOrWhiteSpace(instance))
+                    names.Add(instance);
             }
+
+            instanceNames = new string[names.Count];
+            names.CopyTo(instanceNames);
+            Array.Sort(instanceNames, StringComparer.OrdinalIgnoreCase);
+            topologySignature = string.Join("\n", instanceNames);
         }
         catch (Exception ex)
         {
             Diagnostics.ReportReaderFailure("gpu.discovery", ex);
         }
 
+        // Enumerating names is cheap compared with opening PDH counters. If the
+        // physical engine topology is unchanged, keep all existing handles alive.
+        if (_counters.Count > 0 && StringComparer.Ordinal.Equals(topologySignature, _counterTopologySignature))
+        {
+            Volatile.Write(ref _nextRefreshTimestamp, now + (long)(_refreshInterval.TotalSeconds * Stopwatch.Frequency));
+            return;
+        }
+
+        List<GpuCounter> discovered = [];
+        if (instanceNames.Length > 0)
+        {
+            try
+            {
+                foreach (string instance in instanceNames)
+                {
+                    try
+                    {
+                        var counter = new PerformanceCounter(
+                            "GPU Engine",
+                            "Utilization Percentage",
+                            instance,
+                            readOnly: true);
+                        discovered.Add(new GpuCounter(instance, counter));
+                    }
+                    catch (Exception ex)
+                    {
+                        Diagnostics.ReportReaderFailure("gpu.counter.init", ex);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Diagnostics.ReportReaderFailure("gpu.counter.create", ex);
+            }
+        }
+
         if (discovered.Count > 0 || _counters.Count == 0)
         {
             List<GpuCounter> previous = _counters;
             _counters = discovered;
+            _counterTopologySignature = topologySignature;
             DisposeCounters(previous);
         }
         else
         {
-            DisposeCounters(discovered);
+            // Preserve a last-known-good counter set if discovery is temporarily empty.
+            Volatile.Write(ref _nextRefreshTimestamp, now + 5 * Stopwatch.Frequency);
         }
 
         long retryTicks = _counters.Count > 0
             ? (long)(_refreshInterval.TotalSeconds * Stopwatch.Frequency)
             : 5 * Stopwatch.Frequency;
         Volatile.Write(ref _nextRefreshTimestamp, now + Math.Max(1, retryTicks));
+    }
+
+    internal static string BuildTopologySignature(IEnumerable<string> instances)
+    {
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string instance in instances)
+        {
+            if (!string.IsNullOrWhiteSpace(instance))
+                names.Add(instance);
+        }
+
+        var ordered = new string[names.Count];
+        names.CopyTo(ordered);
+        Array.Sort(ordered, StringComparer.OrdinalIgnoreCase);
+        return string.Join("\n", ordered);
     }
 
     private static void DisposeCounters(IEnumerable<GpuCounter> counters)
