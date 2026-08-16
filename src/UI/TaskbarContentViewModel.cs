@@ -155,13 +155,16 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
         try
         {
             var readers = new Dictionary<string, Func<double>>();
+            CpuMonitor? cpuMonitor = null;
 
             if (Config.Metrics.Cpu) try
             {
                 var cpu = new CpuMonitor();
+                cpuMonitor = cpu;
                 _metricDisposables.Add(cpu);
                 readers["cpu"] = () => cpu.Sample().UsagePercent;
             }
+
             catch { readers["cpu"] = () => double.NaN; }
 
             if (Config.Metrics.Ram) try
@@ -229,7 +232,10 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
             {
                 _temperature = new TemperatureMonitor();
                 _metricDisposables.Add(_temperature);
-                var temperatureReader = new ThrottledMetricReader(_temperature.SampleCelsius, TimeSpan.FromSeconds(10));
+                var temperatureReader = new ThrottledMetricReader(
+                    () => _temperature.SampleCelsius(cpuMonitor?.LastUsagePercent ?? double.NaN),
+                    TimeSpan.FromSeconds(10));
+
                 readers["temperature"] = temperatureReader.Read;
             }
             catch { readers["temperature"] = () => double.NaN; }

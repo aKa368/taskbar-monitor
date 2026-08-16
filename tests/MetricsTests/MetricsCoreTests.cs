@@ -5,17 +5,26 @@ namespace MetricsTests;
 
 public sealed class MetricsCoreTests
 {
-    [Theory]
+        [Theory]
     [InlineData(-4, 0)]
     [InlineData(42, 42)]
     [InlineData(144, 100)]
     public void CpuUsageIsBounded(float input, double expected)
+
     {
         using var monitor = new CpuMonitor(() => input);
-        Assert.Equal(expected, monitor.Sample().UsagePercent);
+                Assert.Equal(expected, monitor.Sample().UsagePercent);
+    }
+
+    [Fact]
+    public void CpuUsageCalculatesBusyDeltaFromSystemTimes()
+    {
+        Assert.Equal(90, CpuMonitor.CalculateUsage(10, 60, 40));
+        Assert.True(double.IsNaN(CpuMonitor.CalculateUsage(100, 10, 10)));
     }
 
     [Theory]
+
     [InlineData(1000UL, 250UL, 0.75)]
     [InlineData(0UL, 0UL, 0)]
     [InlineData(100UL, 200UL, 0)]
@@ -57,11 +66,21 @@ public sealed class MetricsCoreTests
         Assert.Equal(expected, TemperatureMonitor.ConvertPerformanceCounterToCelsius(raw), 2);
     }
 
-    [Fact]
+        [Fact]
     public void AcpiTemperatureUsesTenthsKelvin()
     {
         Assert.Equal(19.85, TemperatureMonitor.ConvertAcpiToCelsius(2930), 2);
     }
+
+    [Fact]
+    public void CpuTemperatureRejectsRoomTemperatureAtFullLoad()
+    {
+        Assert.False(TemperatureMonitor.IsPlausibleCpuTemperature(20, 100));
+        Assert.True(TemperatureMonitor.IsPlausibleCpuTemperature(75, 100));
+        Assert.True(TemperatureMonitor.IsPlausibleCpuTemperature(20, 40));
+    }
+
+
 
     [Fact]
     public async Task SamplerStartsAndStops()
@@ -219,6 +238,20 @@ public sealed class MetricsCoreTests
         };
 
         Assert.Equal(70, GpuMonitor.AggregateBusiestEngine(samples));
+    }
+
+    [Fact]
+    public void GpuSampleIgnoresOneTransientAllZeroSnapshot()
+    {
+        int calls = 0;
+        using var monitor = new GpuMonitor(() =>
+            ++calls == 1
+                ? new[] { ("engine", 100d) }
+                : new[] { ("engine", 0d) });
+
+        Assert.Equal(100, monitor.Sample());
+        Assert.Equal(100, monitor.Sample());
+        Assert.Equal(0, monitor.Sample());
     }
 
     [Fact]

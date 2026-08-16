@@ -8,21 +8,29 @@ public readonly record struct NetworkMetrics(double SentBytesPerSecond, double R
 
 public interface INetworkSnapshotProvider { NetworkSnapshot GetSnapshot(); }
 
-/// <summary>Aggregates operational, non-loopback physical network adapters.</summary>
+/// <summary>
+/// Aggregates operational, non-loopback physical adapters. Adapter topology is
+/// refreshed periodically; byte counters are read from the cached interfaces.
+/// </summary>
 public sealed class PhysicalNetworkSnapshotProvider : INetworkSnapshotProvider
 {
+    private static readonly long TopologyRefreshTicks = 30 * Stopwatch.Frequency;
+    private NetworkInterface[] _adapters = [];
+    private long _nextTopologyRefresh;
+
     public NetworkSnapshot GetSnapshot()
     {
+        RefreshTopologyIfDue();
         ulong sent = 0, received = 0, speed = 0;
-        foreach (NetworkInterface adapter in NetworkInterface.GetAllNetworkInterfaces())
+        foreach (NetworkInterface adapter in _adapters)
         {
-            if (adapter.OperationalStatus != OperationalStatus.Up || adapter.NetworkInterfaceType == NetworkInterfaceType.Loopback ||
-                adapter.NetworkInterfaceType == NetworkInterfaceType.Tunnel || adapter.Speed <= 0)
+            if (adapter.OperationalStatus != OperationalStatus.Up ||
+                adapter.NetworkInterfaceType is NetworkInterfaceType.Loopback or NetworkInterfaceType.Tunnel ||
+                adapter.Speed <= 0)
                 continue;
+
             try
             {
-                // GetIPStatistics includes the active IP stack (IPv4/IPv6).
-                // GetIPv4Statistics silently misses IPv6-only Wi-Fi paths.
                 var stats = adapter.GetIPStatistics();
                 sent += (ulong)Math.Max(0, stats.BytesSent);
                 received += (ulong)Math.Max(0, stats.BytesReceived);
@@ -30,7 +38,27 @@ public sealed class PhysicalNetworkSnapshotProvider : INetworkSnapshotProvider
             }
             catch (NetworkInformationException) { }
         }
+
         return new(sent, received, speed, DateTimeOffset.UtcNow);
+    }
+
+    private void RefreshTopologyIfDue()
+    {
+        long now = Stopwatch.GetTimestamp();
+        if (now < Volatile.Read(ref _nextTopologyRefresh)) return;
+
+        try
+        {
+            _adapters = NetworkInterface.GetAllNetworkInterfaces();
+        }
+        catch (NetworkInformationException)
+        {
+            // Keep the last known topology and retry sooner after a transient failure.
+            Volatile.Write(ref _nextTopologyRefresh, now + Stopwatch.Frequency * 5);
+            return;
+        }
+
+        Volatile.Write(ref _nextTopologyRefresh, now + TopologyRefreshTicks);
     }
 }
 
@@ -52,12 +80,6 @@ public sealed class NetworkMonitor
         return Calculate(previous, current);
     }
 
-    /// <summary>
-    /// Returns one coherent network sample for callers that need both upload
-    /// and download. The metric sampler asks for those two values separately;
-    /// without this small cache the second call advances the snapshot and
-    /// reports an almost-zero delta.
-    /// </summary>
     public NetworkMetrics SampleCached(TimeSpan? window = null)
     {
         long now = Stopwatch.GetTimestamp();
