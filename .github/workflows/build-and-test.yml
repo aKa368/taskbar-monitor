@@ -38,6 +38,15 @@ jobs:
       - name: Test with coverage
         run: dotnet test TaskbarMonitor.sln --configuration Release --no-build --collect:"XPlat Code Coverage" --results-directory artifacts/coverage
 
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with
+          name: coverage-${{ github.run_number }}
+          path: artifacts/coverage
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Check formatting
         run: dotnet format TaskbarMonitor.sln --verify-no-changes --no-restore
 
