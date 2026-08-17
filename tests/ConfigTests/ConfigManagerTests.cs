@@ -179,7 +179,7 @@ public class ConfigManagerTests : IDisposable
 
         using var manager = new ConfigManager(configPath);
 
-        Assert.Equal("Compact", manager.Config.Layout);
+        Assert.Equal("Grid", manager.Config.Layout);
         Assert.Equal("Compact", manager.Config.Density);
         Assert.True(manager.Config.ShowLabels);
         Assert.True(manager.Config.ShowResetCountdown);
@@ -202,7 +202,7 @@ public class ConfigManagerTests : IDisposable
 
         using var manager = new ConfigManager(configPath);
 
-        Assert.Equal("TwoLine", manager.Config.Layout);
+        Assert.Equal("Grid", manager.Config.Layout);
         Assert.Equal("Comfortable", manager.Config.Density);
         Assert.Equal("Sarasa Fixed SC", manager.Config.FontFamily);
         Assert.Equal(1.2, manager.Config.FontScale);

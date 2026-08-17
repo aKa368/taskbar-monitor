@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.CompilerServices;
@@ -79,6 +79,9 @@ public class ColorsConfig
 
 public class ConfigData
 {
+    public const int CurrentSchemaVersion = 2;
+    [JsonPropertyName("configSchemaVersion")]
+    public int ConfigSchemaVersion { get; set; } = 0;
     [JsonPropertyName("metrics")]
     public MetricsConfig Metrics { get; set; } = new();
 
@@ -181,7 +184,7 @@ public class ConfigManager : INotifyPropertyChanged, IDisposable
 
     public static ConfigData GetDefaultConfig()
     {
-        return new ConfigData();
+        return new ConfigData { ConfigSchemaVersion = ConfigData.CurrentSchemaVersion };
     }
 
     public void Load()
@@ -212,6 +215,12 @@ public class ConfigManager : INotifyPropertyChanged, IDisposable
                     loaded.Metrics ??= new MetricsConfig();
                     loaded.Agents ??= new AgentsConfig();
                     loaded.Colors ??= new ColorsConfig();
+                    if (loaded.ConfigSchemaVersion < ConfigData.CurrentSchemaVersion)
+                    {
+                        loaded.Layout = "Grid";
+                        loaded.ConfigSchemaVersion = ConfigData.CurrentSchemaVersion;
+                        SaveInternal(loaded, _configPath);
+                    }
                     _config = loaded;
                 }
                 else
