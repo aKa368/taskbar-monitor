@@ -5,7 +5,7 @@ namespace MetricsTests;
 
 public sealed class MetricsCoreTests
 {
-        [Theory]
+    [Theory]
     [InlineData(-4, 0)]
     [InlineData(42, 42)]
     [InlineData(144, 100)]
@@ -13,7 +13,7 @@ public sealed class MetricsCoreTests
 
     {
         using var monitor = new CpuMonitor(() => input);
-                Assert.Equal(expected, monitor.Sample().UsagePercent);
+        Assert.Equal(expected, monitor.Sample().UsagePercent);
     }
 
     [Fact]
@@ -66,7 +66,7 @@ public sealed class MetricsCoreTests
         Assert.Equal(expected, TemperatureMonitor.ConvertPerformanceCounterToCelsius(raw), 2);
     }
 
-        [Fact]
+    [Fact]
     public void AcpiTemperatureUsesTenthsKelvin()
     {
         Assert.Equal(19.85, TemperatureMonitor.ConvertAcpiToCelsius(2930), 2);
@@ -78,7 +78,7 @@ public sealed class MetricsCoreTests
         Assert.False(TemperatureMonitor.IsPlausibleCpuTemperature(20, 100));
         Assert.True(TemperatureMonitor.IsPlausibleCpuTemperature(75, 100));
         Assert.False(TemperatureMonitor.IsPlausibleCpuTemperature(20, 40));
-          Assert.True(TemperatureMonitor.IsPlausibleCpuTemperature(35, 40));
+        Assert.True(TemperatureMonitor.IsPlausibleCpuTemperature(35, 40));
     }
 
 
