@@ -7,11 +7,11 @@ public sealed class GridPerformanceTextFormatterTests
 {
     [Fact]
     public void FormatsGpuTemperature() =>
-        Assert.Equal("GPU 3% · 54°C", GridPerformanceTextFormatter.Format(true, 3, true, 54));
+        Assert.Equal("GPU 3%  -  54 C", GridPerformanceTextFormatter.Format(true, 3, true, 54));
 
     [Fact]
     public void ShowsUnavailableTemperatureHonestly() =>
-        Assert.Equal("GPU 3% · --°C", GridPerformanceTextFormatter.Format(true, 3, true, double.NaN));
+        Assert.Equal("GPU 3%  -  -- C", GridPerformanceTextFormatter.Format(true, 3, true, double.NaN));
 
     [Fact]
     public void IsEmptyWhenGpuIsDisabled() =>
