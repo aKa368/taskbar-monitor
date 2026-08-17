@@ -14,7 +14,8 @@ public sealed class GpuTemperatureMonitor : IDisposable
 {
     private readonly IGpuTemperatureProvider _provider;
     public GpuTemperatureMonitor() : this(new FallbackGpuTemperatureProvider(
-        new WddmGpuTemperatureProvider(), new NvidiaSmiTemperatureProvider())) { }
+        new WddmGpuTemperatureProvider(), new NvidiaSmiTemperatureProvider()))
+    { }
     public GpuTemperatureMonitor(IGpuTemperatureProvider provider) => _provider = provider ?? throw new ArgumentNullException(nameof(provider));
     public string SourceDescription => (_provider as IGpuTemperatureSourceInfo)?.SourceDescription ?? "GPU temperature provider";
     public double SampleCelsius()
@@ -89,7 +90,8 @@ internal sealed class D3dkmtTemperatureNative : IWddmTemperatureNative
     [StructLayout(LayoutKind.Sequential)] private struct Luid { public uint LowPart; public int HighPart; }
     [StructLayout(LayoutKind.Sequential)] private struct AdapterInfo { public uint Handle; public Luid Luid; public uint NumSources; public int PreciseRegions; }
     [StructLayout(LayoutKind.Sequential)] private struct QueryInfo { public uint Handle; public int Type; public IntPtr Data; public uint DataSize; }
-    [StructLayout(LayoutKind.Sequential)] private struct PerfData
+    [StructLayout(LayoutKind.Sequential)]
+    private struct PerfData
     {
         public uint PhysicalAdapterIndex; public ulong MemoryFrequency; public ulong MaxMemoryFrequency;
         public ulong MaxMemoryFrequencyOc; public ulong MemoryBandwidth; public ulong PcieBandwidth;
@@ -227,12 +229,19 @@ internal sealed class NvidiaSmiRunner : INvidiaSmiRunner
 internal sealed class NvidiaSmiProcess : INvidiaSmiProcess
 {
     private readonly Process _process;
-    internal NvidiaSmiProcess(string executable) => _process = new Process { StartInfo = new ProcessStartInfo
+    internal NvidiaSmiProcess(string executable) => _process = new Process
     {
-        FileName = executable, Arguments = "--query-gpu=temperature.gpu --format=csv,noheader,nounits",
-        UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
-        WindowStyle = ProcessWindowStyle.Hidden
-    }};
+        StartInfo = new ProcessStartInfo
+        {
+            FileName = executable,
+            Arguments = "--query-gpu=temperature.gpu --format=csv,noheader,nounits",
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            WindowStyle = ProcessWindowStyle.Hidden
+        }
+    };
     public bool Start() => _process.Start();
     public Task<string> ReadOutputAsync() => _process.StandardOutput.ReadToEndAsync();
     public void DrainError() => _ = _process.StandardError.ReadToEndAsync();
