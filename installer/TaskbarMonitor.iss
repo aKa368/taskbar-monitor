@@ -1,14 +1,20 @@
 ; TaskbarMonitor installer — standard, transparent Inno Setup package.
 ; Build from a clean self-contained win-x64 publish directory.
-; Signing is intentionally not configured here: use an externally managed
-; Authenticode certificate plus a timestamp server in the release pipeline.
+; Inno Setup creates the installer. Authenticode signing is performed by
+; jobs\Sign-Release.ps1 after ISCC has produced the final installer.
+; CI may override MyAppVersion and MyReleaseRoot with /D preprocessor defines.
 
 #define MyAppName "TaskbarMonitor"
-#define MyAppVersion "1.0.1"
+#ifndef MyAppVersion
+  #define MyAppVersion "1.0.2"
+#endif
 #define MyAppPublisher "aKa368"
 #define MyAppURL "https://github.com/aKa368/taskbar-monitor"
 #define MyAppExeName "TaskbarMonitor.exe"
-#define MySourceDir "..\release-1.0.1\staging\TaskbarMonitor"
+#ifndef MyReleaseRoot
+  #define MyReleaseRoot "release-1.0.2"
+#endif
+
 
 [Setup]
 AppId={{D2BDFD68-623E-42ED-ACE6-BD4FBB231E42}
@@ -25,7 +31,7 @@ PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
-OutputDir=..\release-1.0.1
+OutputDir=..\{#MyReleaseRoot}
 OutputBaseFilename=TaskbarMonitor-Setup-v{#MyAppVersion}-win-x64
 SetupLogging=yes
 WizardStyle=modern
@@ -47,9 +53,9 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 
 [Files]
 ; Main payload. Source is a clean self-contained publish directory.
-Source: "{#MySourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "Config\config.json"
+Source: "..\{#MyReleaseRoot}\staging\TaskbarMonitor\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "Config\config.json"
 ; First-install default only. Runtime settings live in LocalAppData and are never overwritten.
-Source: "{#MySourceDir}\Config\config.json"; DestDir: "{localappdata}\TaskbarMonitor\Config"; DestName: "config.json"; Flags: onlyifdoesntexist
+Source: "..\{#MyReleaseRoot}\staging\TaskbarMonitor\Config\config.json"; DestDir: "{localappdata}\TaskbarMonitor\Config"; DestName: "config.json"; Flags: onlyifdoesntexist
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"

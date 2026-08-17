@@ -3,7 +3,9 @@
 [Oo]bj/
 # Local release staging and generated install packages
 dist/
+release/
 release-*/
+artifacts/
 
 .vs/
 *.user
@@ -19,7 +21,8 @@ jobs/*/verify_out.txt
 
 # Internal work artifacts: remain local, never publish
 .hermes/
-jobs/
+jobs/*
+!jobs/Sign-Release.ps1
 PLAN.md
 RESEARCH_USAGE.md
 
