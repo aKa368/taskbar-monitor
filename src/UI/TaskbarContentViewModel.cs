@@ -156,87 +156,87 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
             CpuMonitor? cpuMonitor = null;
 
             if (Config.Metrics.Cpu) try
-            {
-                var cpu = new CpuMonitor();
-                cpuMonitor = cpu;
-                _metricDisposables.Add(cpu);
-                readers["cpu"] = () => cpu.Sample().UsagePercent;
-            }
+                {
+                    var cpu = new CpuMonitor();
+                    cpuMonitor = cpu;
+                    _metricDisposables.Add(cpu);
+                    readers["cpu"] = () => cpu.Sample().UsagePercent;
+                }
 
-            catch { readers["cpu"] = () => double.NaN; }
+                catch { readers["cpu"] = () => double.NaN; }
 
             if (Config.Metrics.Ram) try
-            {
-                var mem = new MemoryMonitor();
-                _metricDisposables.Add(mem);
-                // MemoryMetrics.Usage is a fraction (0..1), while the UI and
-                // chart use percentages (0..100). Keeping the conversion at
-                // the sampling boundary avoids the old "RAM 0%" display.
-                readers["ram"] = () => mem.Sample().Usage * 100.0;
-            }
-            catch { readers["ram"] = () => double.NaN; }
+                {
+                    var mem = new MemoryMonitor();
+                    _metricDisposables.Add(mem);
+                    // MemoryMetrics.Usage is a fraction (0..1), while the UI and
+                    // chart use percentages (0..100). Keeping the conversion at
+                    // the sampling boundary avoids the old "RAM 0%" display.
+                    readers["ram"] = () => mem.Sample().Usage * 100.0;
+                }
+                catch { readers["ram"] = () => double.NaN; }
 
             if (Config.Metrics.Network) try
-            {
-                _network = new NetworkMonitor();
-                readers["netUp"] = () => _network.SampleCached().SentBytesPerSecond / 1024.0;
-                readers["netDown"] = () => _network.SampleCached().ReceivedBytesPerSecond / 1024.0;
-            }
-            catch
-            {
-                readers["netUp"] = () => double.NaN;
-                readers["netDown"] = () => double.NaN;
-            }
+                {
+                    _network = new NetworkMonitor();
+                    readers["netUp"] = () => _network.SampleCached().SentBytesPerSecond / 1024.0;
+                    readers["netDown"] = () => _network.SampleCached().ReceivedBytesPerSecond / 1024.0;
+                }
+                catch
+                {
+                    readers["netUp"] = () => double.NaN;
+                    readers["netDown"] = () => double.NaN;
+                }
 
             if (Config.Metrics.Disk) try
-            {
-                var disk = new DiskMonitor();
-                _metricDisposables.Add(disk);
-                var diskReader = new ThrottledMetricReader(
-                    () =>
-                    {
-                        var samples = disk.Sample();
-                        return samples.Count > 0 ? samples[0].UsagePercent : double.NaN;
-                    },
-                    TimeSpan.FromSeconds(10));
-                readers["disk"] = diskReader.Read;
-            }
-            catch { readers["disk"] = () => double.NaN; }
+                {
+                    var disk = new DiskMonitor();
+                    _metricDisposables.Add(disk);
+                    var diskReader = new ThrottledMetricReader(
+                        () =>
+                        {
+                            var samples = disk.Sample();
+                            return samples.Count > 0 ? samples[0].UsagePercent : double.NaN;
+                        },
+                        TimeSpan.FromSeconds(10));
+                    readers["disk"] = diskReader.Read;
+                }
+                catch { readers["disk"] = () => double.NaN; }
 
             if (Config.Metrics.Gpu) try
-            {
-                var gpu = new GpuMonitor();
-                _metricDisposables.Add(gpu);
-                var gpuReader = new ThrottledMetricReader(gpu.Sample, TimeSpan.FromSeconds(5));
-                readers["gpu"] = gpuReader.Read;
-            }
-            catch { readers["gpu"] = () => double.NaN; }
+                {
+                    var gpu = new GpuMonitor();
+                    _metricDisposables.Add(gpu);
+                    var gpuReader = new ThrottledMetricReader(gpu.Sample, TimeSpan.FromSeconds(5));
+                    readers["gpu"] = gpuReader.Read;
+                }
+                catch { readers["gpu"] = () => double.NaN; }
 
             if (Config.Metrics.Gpu && Config.Metrics.Temperature) try
-            {
-                var gpuTemperature = new GpuTemperatureMonitor();
-                _metricDisposables.Add(gpuTemperature);
-                var gpuTemperatureReader = new ThrottledMetricReader(() =>
                 {
-                    double value = gpuTemperature.SampleCelsius();
-                    _gpuTemperatureSource = gpuTemperature.SourceDescription;
-                    return value;
-                }, TimeSpan.FromSeconds(8));
-                readers["gpuTemperature"] = gpuTemperatureReader.Read;
-            }
-            catch { readers["gpuTemperature"] = () => double.NaN; }
+                    var gpuTemperature = new GpuTemperatureMonitor();
+                    _metricDisposables.Add(gpuTemperature);
+                    var gpuTemperatureReader = new ThrottledMetricReader(() =>
+                    {
+                        double value = gpuTemperature.SampleCelsius();
+                        _gpuTemperatureSource = gpuTemperature.SourceDescription;
+                        return value;
+                    }, TimeSpan.FromSeconds(8));
+                    readers["gpuTemperature"] = gpuTemperatureReader.Read;
+                }
+                catch { readers["gpuTemperature"] = () => double.NaN; }
 
             if (Config.Metrics.Temperature && Config.Metrics.Cpu) try
-            {
-                _temperature = new TemperatureMonitor();
-                _metricDisposables.Add(_temperature);
-                var temperatureReader = new ThrottledMetricReader(
-                    () => _temperature.SampleCelsius(cpuMonitor?.LastUsagePercent ?? double.NaN),
-                    TimeSpan.FromSeconds(10));
+                {
+                    _temperature = new TemperatureMonitor();
+                    _metricDisposables.Add(_temperature);
+                    var temperatureReader = new ThrottledMetricReader(
+                        () => _temperature.SampleCelsius(cpuMonitor?.LastUsagePercent ?? double.NaN),
+                        TimeSpan.FromSeconds(10));
 
-                readers["temperature"] = temperatureReader.Read;
-            }
-            catch { readers["temperature"] = () => double.NaN; }
+                    readers["temperature"] = temperatureReader.Read;
+                }
+                catch { readers["temperature"] = () => double.NaN; }
 
             if (Config.Metrics.Ram && Config.Metrics.Temperature && Config.Metrics.RamTemperature)
             {

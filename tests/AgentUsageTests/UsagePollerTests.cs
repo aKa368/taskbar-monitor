@@ -190,16 +190,22 @@ public sealed class UsagePollerTests
             await using var poller = new UsagePoller(
                 new UsagePollerOptions
                 {
-                    CommandCodeEnabled = false, OpenCodeEnabled = false, CodexEnabled = false,
-                    AntigravityEnabled = false, ClaudeEnabled = false,
+                    CommandCodeEnabled = false,
+                    OpenCodeEnabled = false,
+                    CodexEnabled = false,
+                    AntigravityEnabled = false,
+                    ClaudeEnabled = false,
                     ApiPollInterval = TimeSpan.FromHours(1)
                 }, codex: codex);
 
             poller.Start();
             poller.Reconfigure(new UsagePollerOptions
             {
-                CommandCodeEnabled = false, OpenCodeEnabled = false, CodexEnabled = true,
-                AntigravityEnabled = false, ClaudeEnabled = false,
+                CommandCodeEnabled = false,
+                OpenCodeEnabled = false,
+                CodexEnabled = true,
+                AntigravityEnabled = false,
+                ClaudeEnabled = false,
                 ApiPollInterval = TimeSpan.FromHours(1)
             });
 
@@ -222,8 +228,11 @@ public sealed class UsagePollerTests
             using var codex = new CodexUsage(handler, authPath);
             await using var poller = new UsagePoller(new UsagePollerOptions
             {
-                CommandCodeEnabled = false, OpenCodeEnabled = false, CodexEnabled = true,
-                AntigravityEnabled = false, ClaudeEnabled = false,
+                CommandCodeEnabled = false,
+                OpenCodeEnabled = false,
+                CodexEnabled = true,
+                AntigravityEnabled = false,
+                ClaudeEnabled = false,
                 ApiPollInterval = TimeSpan.FromHours(1)
             }, codex: codex);
 
@@ -246,8 +255,12 @@ public sealed class UsagePollerTests
             using var codex = new CodexUsage(slow, authPath);
             await using var poller = new UsagePoller(new UsagePollerOptions
             {
-                CommandCodeEnabled = false, OpenCodeEnabled = false, CodexEnabled = true,
-                AntigravityEnabled = false, ClaudeEnabled = false, ApiPollInterval = TimeSpan.FromHours(1)
+                CommandCodeEnabled = false,
+                OpenCodeEnabled = false,
+                CodexEnabled = true,
+                AntigravityEnabled = false,
+                ClaudeEnabled = false,
+                ApiPollInterval = TimeSpan.FromHours(1)
             }, codex: codex);
 
             Task initial = poller.StartAsync();
@@ -273,9 +286,13 @@ public sealed class UsagePollerTests
             using var codex = new CodexUsage(handler, authPath);
             await using var poller = new UsagePoller(new UsagePollerOptions
             {
-                CommandCodeEnabled = true, OpenCodeEnabled = false, CodexEnabled = true,
-                AntigravityEnabled = false, ClaudeEnabled = false,
-                SqlitePollInterval = TimeSpan.FromHours(1), ApiPollInterval = TimeSpan.FromHours(1)
+                CommandCodeEnabled = true,
+                OpenCodeEnabled = false,
+                CodexEnabled = true,
+                AntigravityEnabled = false,
+                ClaudeEnabled = false,
+                SqlitePollInterval = TimeSpan.FromHours(1),
+                ApiPollInterval = TimeSpan.FromHours(1)
             }, commandCode: commandCode, codex: codex);
 
             poller.Start();
@@ -304,9 +321,13 @@ public sealed class UsagePollerTests
             using var codex = new CodexUsage(slowApi, authPath);
             await using var poller = new UsagePoller(new UsagePollerOptions
             {
-                CommandCodeEnabled = true, OpenCodeEnabled = false, CodexEnabled = true,
-                AntigravityEnabled = false, ClaudeEnabled = false,
-                SqlitePollInterval = TimeSpan.FromHours(1), ApiPollInterval = TimeSpan.FromHours(1)
+                CommandCodeEnabled = true,
+                OpenCodeEnabled = false,
+                CodexEnabled = true,
+                AntigravityEnabled = false,
+                ClaudeEnabled = false,
+                SqlitePollInterval = TimeSpan.FromHours(1),
+                ApiPollInterval = TimeSpan.FromHours(1)
             }, commandCode: commandCode, codex: codex);
 
             poller.Start();
@@ -335,16 +356,24 @@ public sealed class UsagePollerTests
             using var codex = new CodexUsage(codexHandler, authPath);
             await using var poller = new UsagePoller(new UsagePollerOptions
             {
-                CommandCodeEnabled = false, OpenCodeEnabled = false, CodexEnabled = false,
-                AntigravityEnabled = true, ClaudeEnabled = false, ApiPollInterval = TimeSpan.FromHours(1)
+                CommandCodeEnabled = false,
+                OpenCodeEnabled = false,
+                CodexEnabled = false,
+                AntigravityEnabled = true,
+                ClaudeEnabled = false,
+                ApiPollInterval = TimeSpan.FromHours(1)
             }, codex: codex, antigravity: antigravity);
             poller.Start();
             await slowOld.FirstRequestStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
             poller.Reconfigure(new UsagePollerOptions
             {
-                CommandCodeEnabled = false, OpenCodeEnabled = false, CodexEnabled = true,
-                AntigravityEnabled = true, ClaudeEnabled = false, ApiPollInterval = TimeSpan.FromHours(1)
+                CommandCodeEnabled = false,
+                OpenCodeEnabled = false,
+                CodexEnabled = true,
+                AntigravityEnabled = true,
+                ClaudeEnabled = false,
+                ApiPollInterval = TimeSpan.FromHours(1)
             });
 
             await WaitUntilAsync(() => poller.Get(AgentIds.Codex) is not null);
@@ -365,15 +394,23 @@ public sealed class UsagePollerTests
             using var codex = new CodexUsage(codexHandler, authPath);
             var poller = new UsagePoller(new UsagePollerOptions
             {
-                CommandCodeEnabled = false, OpenCodeEnabled = false, CodexEnabled = false,
-                AntigravityEnabled = true, ClaudeEnabled = false, ApiPollInterval = TimeSpan.FromHours(1)
+                CommandCodeEnabled = false,
+                OpenCodeEnabled = false,
+                CodexEnabled = false,
+                AntigravityEnabled = true,
+                ClaudeEnabled = false,
+                ApiPollInterval = TimeSpan.FromHours(1)
             }, codex: codex, antigravity: antigravity);
             poller.Start();
             await hangingOld.FirstRequestStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
             poller.Reconfigure(new UsagePollerOptions
             {
-                CommandCodeEnabled = false, OpenCodeEnabled = false, CodexEnabled = true,
-                AntigravityEnabled = true, ClaudeEnabled = false, ApiPollInterval = TimeSpan.FromHours(1)
+                CommandCodeEnabled = false,
+                OpenCodeEnabled = false,
+                CodexEnabled = true,
+                AntigravityEnabled = true,
+                ClaudeEnabled = false,
+                ApiPollInterval = TimeSpan.FromHours(1)
             });
             await Task.Delay(50, TestContext.Current.CancellationToken);
             await poller.DisposeAsync();
