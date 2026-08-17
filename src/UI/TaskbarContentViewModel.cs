@@ -35,7 +35,7 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
     private UsagePoller? _poller;
     private string? _usageInitializationError;
     private string _fontFamily = "Sarasa Fixed SC";
-    private string _networkRateText = "â†‘ -- â†“ --";
+    private string _networkRateText = "UP -- DOWN --";
     private string _gridPerformanceText = string.Empty;
     private bool _disposed;
 
@@ -93,7 +93,7 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
     {
         get
         {
-            return $"GPU utilization â€” busiest physical engine Â· Temperature: {_gpuTemperatureSource}";
+            return $"GPU utilization â€” busiest physical engine  -  Temperature: {_gpuTemperatureSource}";
         }
     }
 
@@ -252,7 +252,7 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
 
             // GPU thermal libraries often need privileged driver access. This
             // user-mode widget intentionally does not load hardware drivers;
-            // lack of a trusted sensor is shown as --Â°C.
+            // lack of a trusted sensor is shown as -- C.
 
             // Native counters and adapter enumeration are already cached by the
             // UI; a 2.5-second sampling cadence keeps the widget responsive
@@ -401,8 +401,8 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
                 case "cpu":
                     value = cpu;
                     text = float.IsFinite(value) && cpuTemperature > 0
-                        ? $"CPU {value:F0}% Â· {cpuTemperature:F0}Â°C"
-                        : float.IsFinite(value) ? $"CPU {value:F0}% Â· --Â°C" : "CPU -- Â· --Â°C";
+                        ? $"CPU {value:F0}%  -  {cpuTemperature:F0} C"
+                        : float.IsFinite(value) ? $"CPU {value:F0}%  -  -- C" : "CPU --  -  -- C";
                     pod.ToolTipText = Config.Metrics.Temperature
                         ? _temperature?.SourceDescription ?? "Windows thermal zone unavailable"
                         : "CPU temperature disabled";
@@ -410,7 +410,7 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
                 case "ram":
                     value = ram;
                     text = Config.Metrics.Temperature && Config.Metrics.RamTemperature
-                        ? float.IsFinite(value) ? $"RAM {value:F0}% Â· {(float.IsFinite(ramTemperature) ? $"{ramTemperature:F0}Â°C" : "--Â°C")}" : "RAM -- Â· --Â°C"
+                        ? float.IsFinite(value) ? $"RAM {value:F0}%  -  {(float.IsFinite(ramTemperature) ? $"{ramTemperature:F0} C" : "-- C")}" : "RAM --  -  -- C"
                         : float.IsFinite(value) ? $"RAM {value:F0}%" : "RAM --";
                     pod.ToolTipText = Config.Metrics.RamTemperature ? _ramTemperatureReason : "RAM utilization";
                     break;
@@ -426,8 +426,8 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
                 case "gpu":
                     value = gpu;
                     text = float.IsFinite(gpu) && gpuTemperature > 0
-                        ? $"GPU {gpu:F0}% Â· {gpuTemperature:F0}Â°C"
-                        : float.IsFinite(gpu) ? $"GPU {gpu:F0}% Â· --Â°C" : "GPU -- Â· --Â°C";
+                        ? $"GPU {gpu:F0}%  -  {gpuTemperature:F0} C"
+                        : float.IsFinite(gpu) ? $"GPU {gpu:F0}%  -  -- C" : "GPU --  -  -- C";
                     pod.ToolTipText = Config.Metrics.Temperature ? _gpuTemperatureSource : "GPU temperature disabled";
                     break;
                 default:
@@ -469,7 +469,7 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
                     // SQLite agents: hiá»ƒn thá»‹ cost + tokens thay vÃ¬ % quota
                     double cost = last5h.Cost ?? 0;
                     double tok = (last5h.TokensTotal ?? 0) / 1e6;
-                    valueText = $"${cost:F2} Â· {tok:F1}M";
+                    valueText = $"${cost:F2}  -  {tok:F1}M";
                 }
                 else
                 {
@@ -478,7 +478,7 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
             }
 
             if (data?.Error is not null)
-                valueText = valueText == "--" ? "ERR" : $"{valueText} Â· ERR";
+                valueText = valueText == "--" ? "ERR" : $"{valueText}  -  ERR";
             else if (data is null && pod.Key == "Codex" && _usageInitializationError is not null)
                 valueText = "ERR";
             valueText = UsageTextFormatter.FormatCompactAgentDisplay(data,
@@ -535,10 +535,10 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
 
     private static string FormatNetworkText(float upKbps, float downKbps)
     {
-        if (!float.IsFinite(upKbps) || !float.IsFinite(downKbps)) return "â†‘ --  â†“ --";
+        if (!float.IsFinite(upKbps) || !float.IsFinite(downKbps)) return "UP --  DOWN --";
         string upText = upKbps > 1024 ? $"{upKbps / 1024f:F1} MB/s" : $"{upKbps:F0} KB/s";
         string downText = downKbps > 1024 ? $"{downKbps / 1024f:F1} MB/s" : $"{downKbps:F0} KB/s";
-        return $"â†‘ {upText} â†“ {downText}";
+        return $"UP {upText} DOWN {downText}";
     }
 
 
