@@ -2,6 +2,11 @@
   <Folder Name="/src/">
     <Project Path="src/TaskbarMonitor.csproj" />
   </Folder>
+  <Folder Name="/src/ThirdParty/" />
+  <Folder Name="/src/ThirdParty/Deskband11Lib/">
+    <Project Path="src/ThirdParty/Deskband11Lib/Deskband11Lib.Core/Deskband11Lib.Core.csproj" />
+    <Project Path="src/ThirdParty/Deskband11Lib/Deskband11Lib.Wpf/Deskband11Lib.Wpf.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/AgentUsageTests/AgentUsageTests.csproj" />
     <Project Path="tests/ConfigTests/ConfigTests.csproj" />
