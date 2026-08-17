@@ -10,8 +10,8 @@ public static class GridPerformanceTextFormatter
         {
             parts.Add(double.IsFinite(gpuPercent) ? $"GPU {gpuPercent:F0}%" : "GPU --");
             if (temperatureEnabled)
-                parts.Add(double.IsFinite(gpuCelsius) ? $"{gpuCelsius:F0}°C" : "--°C");
+                parts.Add(double.IsFinite(gpuCelsius) ? $"{gpuCelsius:F0} C" : "-- C");
         }
-        return string.Join(" · ", parts);
+        return string.Join("  -  ", parts);
     }
 }
