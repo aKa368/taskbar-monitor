@@ -14,7 +14,12 @@ public sealed class BaselineBenchmark
         const int sampleCycles = 250;
         using Process process = Process.GetCurrentProcess();
         using var monitor = new GpuMonitor(() => new[] { ("engine_0", 50d) });
-
+        for (var i = 0; i < 25; i++)
+        {
+            Assert.Equal(50d, monitor.Sample());
+        }
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
         ResourceSnapshot before = Capture(process);
         Stopwatch stopwatch = Stopwatch.StartNew();
         for (var i = 0; i < sampleCycles; i++)
