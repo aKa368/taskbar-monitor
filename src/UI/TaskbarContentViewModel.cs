@@ -29,7 +29,6 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
     private MetricSampler? _sampler;
     private NetworkMonitor? _network;
     private TemperatureMonitor? _temperature;
-    private readonly NetworkSparkline _networkSparkline = new();
     private string _ramTemperatureReason = "DIMM temperature unavailable";
     private string _gpuTemperatureSource = "GPU driver exposes no temperature telemetry";
     private string? _metricSignature;
@@ -501,7 +500,7 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
             cpuTemperature = gpuTemperature;
             isApuFallback = true;
         }
-        NetworkRateText = NetworkRateTextFormatter.FormatPairWithSparkline(netUp, netDown, _networkSparkline);
+        NetworkRateText = NetworkRateTextFormatter.FormatPair(netUp, netDown);
         GridPerformanceText = GridPerformanceTextFormatter.Format(
             Config.Metrics.Gpu, gpu,
             Config.Metrics.Temperature, gpuTemperature);
@@ -632,7 +631,7 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
                 case "network":
                                     value = float.IsFinite(netUp) && float.IsFinite(netDown)
                                         ? Math.Min(100f, (netUp + netDown) / 10f) : 0;
-                                    text = NetworkRateTextFormatter.FormatPairWithSparkline(netUp, netDown, _networkSparkline);
+                                    text = NetworkRateTextFormatter.FormatPair(netUp, netDown);
                                     pod.Line1 = float.IsFinite(netUp) ? $"↑ {FormatNetworkRate(netUp)}" : "↑ --";
                                     pod.Line2 = float.IsFinite(netDown) ? $"↓ {FormatNetworkRate(netDown)}" : "↓ --";
                                     pod.HasLine2 = true;
