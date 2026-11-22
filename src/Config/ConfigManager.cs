@@ -32,8 +32,11 @@ public class MetricsConfig
     public bool RamTemperature { get; set; } = false;
 
     [JsonPropertyName("gameOverlay")]
-    public bool GameOverlay { get; set; } = true;
-}
+        public bool GameOverlay { get; set; } = true;
+
+        [JsonPropertyName("clock")]
+        public bool Clock { get; set; } = false;
+    }
 
 public class AgentsConfig
 {
@@ -148,8 +151,11 @@ public class ConfigData
     public bool AutoHideOnFullscreen { get; set; } = true;
 
     [JsonPropertyName("gameOverlayMode")]
-        public string GameOverlayMode { get; set; } = "AutoHide";
-    }
+            public string GameOverlayMode { get; set; } = "AutoHide";
+
+        [JsonPropertyName("theme")]
+        public string Theme { get; set; } = "Midnight";
+        }
 
 public class ConfigManager : INotifyPropertyChanged, IDisposable
 {

@@ -43,14 +43,15 @@ public sealed class LayoutManager
             && _currentConfig.Agents.Antigravity == config.Agents.Antigravity
             && _currentConfig.Agents.Claude == config.Agents.Claude;
         bool metricsSame = _currentConfig != null
-            && _currentConfig.Metrics.Cpu == config.Metrics.Cpu
-            && _currentConfig.Metrics.Ram == config.Metrics.Ram
-            && _currentConfig.Metrics.Network == config.Metrics.Network
-            && _currentConfig.Metrics.Disk == config.Metrics.Disk
-            && _currentConfig.Metrics.Gpu == config.Metrics.Gpu
-            && _currentConfig.Metrics.Temperature == config.Metrics.Temperature
-            && _currentConfig.Metrics.RamTemperature == config.Metrics.RamTemperature
-            && _currentConfig.Metrics.GameOverlay == config.Metrics.GameOverlay;
+                    && _currentConfig.Metrics.Cpu == config.Metrics.Cpu
+                    && _currentConfig.Metrics.Ram == config.Metrics.Ram
+                    && _currentConfig.Metrics.Network == config.Metrics.Network
+                    && _currentConfig.Metrics.Disk == config.Metrics.Disk
+                    && _currentConfig.Metrics.Gpu == config.Metrics.Gpu
+                    && _currentConfig.Metrics.Temperature == config.Metrics.Temperature
+                    && _currentConfig.Metrics.RamTemperature == config.Metrics.RamTemperature
+                    && _currentConfig.Metrics.GameOverlay == config.Metrics.GameOverlay
+                    && _currentConfig.Metrics.Clock == config.Metrics.Clock;
 
         if (!forceRebuild
             && _currentKind == kind
@@ -94,11 +95,16 @@ public sealed class LayoutManager
             }
 
             if (config.Metrics.GameOverlay && kind != WidgetLayoutKind.Grid)
-            {
-                metricPods.Add(new MetricPodViewModel("fps", "FPS") { IsVisible = false });
-                metricPods.Add(new MetricPodViewModel("ping", "PING") { IsVisible = false });
-            }
-        }
+                        {
+                            metricPods.Add(new MetricPodViewModel("fps", "FPS") { IsVisible = false });
+                            metricPods.Add(new MetricPodViewModel("ping", "PING") { IsVisible = false });
+                        }
+
+                        if (config.Metrics.Clock)
+                        {
+                            metricPods.Add(new MetricPodViewModel("clock", "CLK"));
+                        }
+                    }
 
         if (def.ShowAgentPods)
         {

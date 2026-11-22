@@ -10,6 +10,20 @@ public static class NetworkRateTextFormatter
     public static string FormatPair(float uploadKbps, float downloadKbps) =>
         $"{FormatValue("↑", uploadKbps)} {FormatValue("↓", downloadKbps)}";
 
+    /// <summary>
+    /// Formats the pair with an appended download sparkline (upload sparkline optional).
+    /// Keeps backward compatibility: existing FormatPair signature unchanged.
+    /// </summary>
+    public static string FormatPairWithSparkline(float uploadKbps, float downloadKbps, NetworkSparkline? sparkline = null)
+    {
+        string baseText = FormatPair(uploadKbps, downloadKbps);
+        if (sparkline == null) return baseText;
+
+        sparkline.Push(downloadKbps, uploadKbps);
+        string spark = sparkline.RenderDownload();
+        return string.IsNullOrEmpty(spark) ? baseText : $"{baseText} {spark}";
+    }
+
     private static string Format(string direction, float kbps)
     {
         string value = FormatValue(direction, kbps);

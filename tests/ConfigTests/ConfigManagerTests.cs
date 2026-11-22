@@ -3,6 +3,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using TaskbarMonitor.Config;
+using TaskbarMonitor.UI.Palette;
 using Xunit;
 
 namespace ConfigTests;
@@ -58,6 +59,7 @@ public class ConfigManagerTests : IDisposable
         Assert.True(manager.Config.Metrics.Network);
         Assert.False(manager.Config.Metrics.Disk);
         Assert.False(manager.Config.Metrics.Gpu);
+        Assert.False(manager.Config.Metrics.Clock);
         Assert.True(manager.Config.Agents.CommandCode);
         Assert.True(manager.Config.Agents.OpenCode);
         Assert.Equal("Auto", manager.Config.Placement);
@@ -83,7 +85,8 @@ public class ConfigManagerTests : IDisposable
                 Ram = true,
                 Network = true,
                 Disk = true,
-                Gpu = true
+                Gpu = true,
+                Clock = true
             },
             Agents = new AgentsConfig
             {
@@ -115,6 +118,7 @@ public class ConfigManagerTests : IDisposable
         Assert.True(manager2.Config.Autostart);
         Assert.True(manager2.Config.Metrics.Disk);
         Assert.True(manager2.Config.Metrics.Gpu);
+        Assert.True(manager2.Config.Metrics.Clock);
         Assert.True(manager2.Config.Agents.Claude);
         Assert.Equal("#FF0000", manager2.Config.Colors.Cpu);
     }
@@ -164,7 +168,7 @@ public class ConfigManagerTests : IDisposable
     [Fact]
     public void TestOldConfig_WithoutNewKeys_GetsDefaults()
     {
-        // Config cũ (phase 1) không có layout/density/font keys → defaults đúng
+        // Config cu (phase 1) khong co layout/density/font keys -> defaults dung
         string configPath = Path.Combine(_tempDirectory, "config_old.json");
         File.WriteAllText(configPath, @"{
           ""metrics"": { ""cpu"": true, ""ram"": true },
@@ -216,6 +220,23 @@ public class ConfigManagerTests : IDisposable
 
         Assert.True(manager.Config.Metrics.Temperature);
         Assert.Equal("Right", manager.Config.Position);
+    }
+
+    [Fact]
+    public void TestClockMetricKey_ParsesAndDefaultsFalse()
+    {
+        string configPath = Path.Combine(_tempDirectory, "config_clock.json");
+        File.WriteAllText(configPath, "{\"metrics\":{\"clock\":true}}");
+
+        using var manager = new ConfigManager(configPath);
+
+        Assert.True(manager.Config.Metrics.Clock);
+
+        // Default should be false when not specified
+        string configPath2 = Path.Combine(_tempDirectory, "config_clock2.json");
+        File.WriteAllText(configPath2, "{}");
+        using var manager2 = new ConfigManager(configPath2);
+        Assert.False(manager2.Config.Metrics.Clock);
     }
 
     [Fact]
@@ -275,5 +296,50 @@ public class ConfigManagerTests : IDisposable
         using var manager2 = new ConfigManager(configPath);
 
         Assert.Equal(440, manager2.Config.PreferredWidth);
+    }
+
+    [Fact]
+    public void TestThemeProperty_DefaultIsMidnight_And_Persists()
+    {
+        string configPath = Path.Combine(_tempDirectory, "config_theme.json");
+        using var manager = new ConfigManager(configPath);
+
+        // Default theme should be Midnight
+        Assert.Equal("Midnight", manager.Config.Theme);
+
+        // Change theme and save
+        var modified = manager.Config;
+        modified.Theme = "Ocean";
+        modified.Colors = ThemePresets.Get("Ocean");
+        manager.Save(modified);
+
+        // Reload and verify persistence
+        using var manager2 = new ConfigManager(configPath);
+        Assert.Equal("Ocean", manager2.Config.Theme);
+        Assert.Equal("#006D77", manager2.Config.Colors.Cpu);
+        Assert.Equal("#0096C7", manager2.Config.Colors.Ram);
+        Assert.Equal("#00B4D8", manager2.Config.Colors.Network);
+        Assert.Equal("#48CAE4", manager2.Config.Colors.CommandCode);
+        Assert.Equal("#90E0EF", manager2.Config.Colors.OpenCode);
+        Assert.Equal("#ADE8F4", manager2.Config.Colors.Antigravity);
+        Assert.Equal("#CAF0F8", manager2.Config.Colors.Claude);
+    }
+
+    [Fact]
+    public void TestOldConfig_WithoutThemeKey_GetsDefaultMidnight()
+    {
+        // Config without theme key should default to Midnight
+        string configPath = Path.Combine(_tempDirectory, "config_no_theme.json");
+        File.WriteAllText(configPath, @"{
+          ""metrics"": { ""cpu"": true, ""ram"": true },
+          ""updateIntervalSeconds"": 1,
+          ""placement"": ""Auto"",
+          ""preferredWidth"": 360,
+          ""autostart"": false
+        }");
+
+        using var manager = new ConfigManager(configPath);
+
+        Assert.Equal("Midnight", manager.Config.Theme);
     }
 }

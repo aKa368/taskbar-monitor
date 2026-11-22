@@ -9,6 +9,7 @@ public enum SettingsCommandKind
     ToggleAgent,
     ChooseLayout,
     ChooseDensity,
+    ChooseTheme,
     SetInterval,
     SetPlacement,
     ToggleAutostart,

@@ -2,14 +2,14 @@
 
 All notable changes to TaskbarMonitor are documented in this file.
 
-## [1.0.5] - 2026-11-22
+## [1.0.6] - 2026-11-22
 
 ### Removed
 - Dormant Codex/CPA code: `CodexUsage` provider, `AgentIds.Codex`, `CodexEnabled` flag, all Codex branches in `UsagePoller`, `TaskbarContentViewModel`, `LayoutManager`, `ConfigManager`, and config.json.
 - Codex-specific tests and assertions; remaining agent tests use Antigravity/CommandCode/OpenCode/Claude for coverage.
 
 ### Changed
-- Unified version to 1.0.5 across `Directory.Build.props`, `TaskbarMonitor.csproj`, `TaskbarMonitor.iss`, and `CHANGELOG.md`.
+- Unified version to 1.0.6 across `Directory.Build.props`, `TaskbarMonitor.csproj`, `TaskbarMonitor.iss`, and `CHANGELOG.md`.
 
 ## [Unreleased]
 

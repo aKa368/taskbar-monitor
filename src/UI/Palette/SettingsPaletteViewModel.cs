@@ -92,24 +92,51 @@ public sealed class SettingsPaletteViewModel : INotifyPropertyChanged
         }
 
         // Density
-        foreach (var density in new[] { "Compact", "Comfortable" })
-        {
-            list.Add(new SettingsCommand
-            {
-                Id = $"set-density-{density}",
-                Label = $"Density: {density}",
-                Description = density == "Compact" ? "Padding & font nhỏ gọn" : "Padding & font thoải mái hơn",
-                Kind = SettingsCommandKind.ChooseDensity,
-                IsActive = () => string.Equals(_config.Density, density, StringComparison.OrdinalIgnoreCase),
-                Execute = () =>
+                foreach (var density in new[] { "Compact", "Comfortable" })
                 {
-                    _config.Density = density;
-                    _save(_config);
+                    list.Add(new SettingsCommand
+                    {
+                        Id = $"set-density-{density}",
+                        Label = $"Density: {density}",
+                        Description = density == "Compact" ? "Padding & font nhỏ gọn" : "Padding & font thoải mái hơn",
+                        Kind = SettingsCommandKind.ChooseDensity,
+                        IsActive = () => string.Equals(_config.Density, density, StringComparison.OrdinalIgnoreCase),
+                        Execute = () =>
+                        {
+                            _config.Density = density;
+                            _save(_config);
+                        }
+                    });
                 }
-            });
-        }
 
-        // Metrics
+                // Theme presets
+                foreach (var themeName in ThemePresets.All.Keys)
+                {
+                    var theme = themeName;
+                    list.Add(new SettingsCommand
+                    {
+                        Id = $"theme-{theme}",
+                        Label = $"Theme: {theme}",
+                        Description = $"Áp dụng bộ màu {theme} cho tất cả pod",
+                        Kind = SettingsCommandKind.ChooseTheme,
+                        IsActive = () => ThemePresets.Matches(_config.Colors, theme),
+                        Execute = () =>
+                        {
+                            var preset = ThemePresets.Get(theme);
+                            _config.Colors.Cpu = preset.Cpu;
+                            _config.Colors.Ram = preset.Ram;
+                            _config.Colors.Network = preset.Network;
+                            _config.Colors.CommandCode = preset.CommandCode;
+                            _config.Colors.OpenCode = preset.OpenCode;
+                            _config.Colors.Antigravity = preset.Antigravity;
+                            _config.Colors.Claude = preset.Claude;
+                            _config.Theme = theme;
+                            _save(_config);
+                        }
+                    });
+                }
+
+                // Metrics
         AddToggle(list, "toggle-metric-cpu", "Metric: CPU & GPU (APU)", "Bật/tắt pod CPU và GPU", SettingsCommandKind.ToggleMetric,
             () => _config.Metrics.Cpu, v => _config.Metrics.Cpu = v);
         AddToggle(list, "toggle-metric-ram", "Metric: RAM", "Bật/tắt pod RAM", SettingsCommandKind.ToggleMetric,
@@ -123,9 +150,11 @@ public sealed class SettingsPaletteViewModel : INotifyPropertyChanged
         AddToggle(list, "toggle-metric-temperature", "Metric: Temperature", "Bật/tắt pod nhiệt độ", SettingsCommandKind.ToggleMetric,
             () => _config.Metrics.Temperature, v => _config.Metrics.Temperature = v);
         AddToggle(list, "toggle-metric-ram-temperature", "Metric: RAM temperature", "DIMM sensor if a user-mode provider exists; otherwise --°C", SettingsCommandKind.ToggleMetric,
-            () => _config.Metrics.RamTemperature, v => _config.Metrics.RamTemperature = v);
+                    () => _config.Metrics.RamTemperature, v => _config.Metrics.RamTemperature = v);
+                AddToggle(list, "toggle-metric-clock", "Metric: Clock", "Bật/tắt pod đồng hồ (HH:mm)", SettingsCommandKind.ToggleMetric,
+                    () => _config.Metrics.Clock, v => _config.Metrics.Clock = v);
 
-        // Agents
+                // Agents
         AddToggle(list, "toggle-agent-opencode", "Agent: OpenCode", "Bật/tắt pod OpenCode", SettingsCommandKind.ToggleAgent,
                     () => _config.Agents.OpenCode, v => _config.Agents.OpenCode = v);
                 AddToggle(list, "toggle-agent-commandcode", "Agent: CommandCode", "Bật/tắt pod CommandCode", SettingsCommandKind.ToggleAgent,
