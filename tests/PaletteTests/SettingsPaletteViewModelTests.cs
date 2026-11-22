@@ -1,4 +1,7 @@
+using System.Windows;
+using System.Windows.Controls;
 using TaskbarMonitor.Config;
+using TaskbarMonitor.UI;
 using TaskbarMonitor.UI.Palette;
 using Xunit;
 
@@ -15,16 +18,16 @@ public class SettingsPaletteViewModelTests
     }
 
     [Fact]
-    public void Builds_Commands_For_All_Groups()
-    {
-        var (vm, _, _) = MakeVm();
-        Assert.Contains(vm.Commands, c => c.Id == "toggle-metric-cpu");
-        Assert.DoesNotContain(vm.Commands, c => c.Id == "toggle-metric-power");
-        Assert.Contains(vm.Commands, c => c.Id == "toggle-agent-codex" && c.Label == "Agent: ChatGPT Usage");
-        Assert.Contains(vm.Commands, c => c.Id == "choose-layout-TwoLine");
-        Assert.Contains(vm.Commands, c => c.Id == "set-interval-1");
-        Assert.Contains(vm.Commands, c => c.Id == "set-autostart");
-    }
+        public void Builds_Commands_For_All_Groups()
+        {
+            var (vm, _, _) = MakeVm();
+            Assert.Contains(vm.Commands, c => c.Id == "toggle-metric-cpu");
+            Assert.DoesNotContain(vm.Commands, c => c.Id == "toggle-metric-power");
+            Assert.Contains(vm.Commands, c => c.Id == "toggle-agent-opencode" && c.Label == "Agent: OpenCode");
+            Assert.Contains(vm.Commands, c => c.Id == "choose-layout-TwoLine");
+            Assert.Contains(vm.Commands, c => c.Id == "set-interval-1");
+            Assert.Contains(vm.Commands, c => c.Id == "set-autostart");
+        }
 
     [Fact]
     public void Search_Filters_By_Label_And_Description()
@@ -78,32 +81,18 @@ public class SettingsPaletteViewModelTests
     }
 
     [Fact]
-    public void Toggle_Agent_Flips_And_Saves()
-    {
-        var (vm, cfg, saved) = MakeVm();
-        Assert.True(cfg.Agents.OpenCode);
-        var cmd = vm.Commands.First(c => c.Id == "toggle-agent-opencode");
-        cmd.Execute();
-        Assert.False(cfg.Agents.OpenCode);
-        Assert.Single(saved);
-    }
+        public void Toggle_Agent_Flips_And_Saves()
+        {
+            var (vm, cfg, saved) = MakeVm();
+            Assert.True(cfg.Agents.OpenCode);
+            var cmd = vm.Commands.First(c => c.Id == "toggle-agent-opencode");
+            cmd.Execute();
+            Assert.False(cfg.Agents.OpenCode);
+            Assert.Single(saved);
+        }
 
-    [Fact]
-    public void Toggle_ChatGptUsage_ChangesOnlyLegacyCodexFlag()
-    {
-        var (vm, cfg, saved) = MakeVm();
-        cfg.Agents.Codex = true;
-        cfg.Agents.CommandCode = true;
-
-        vm.Commands.Single(c => c.Id == "toggle-agent-codex").Execute();
-
-        Assert.False(cfg.Agents.Codex);
-        Assert.True(cfg.Agents.CommandCode);
-        Assert.Single(saved);
-    }
-
-    [Fact]
-    public void Set_Interval_Updates_Config()
+        [Fact]
+        public void Set_Interval_Updates_Config()
     {
         var (vm, cfg, _) = MakeVm();
         vm.Commands.First(c => c.Id == "set-interval-5").Execute();
@@ -155,6 +144,43 @@ public class SettingsPaletteViewModelTests
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
         Assert.True(completed.Wait(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken), "Settings window did not finish loading.");
+        thread.Join();
+        Assert.Null(failure);
+    }
+
+    [Fact]
+    public void SharedContextMenuUsesSystemFontAndCleanLabels()
+    {
+        Exception? failure = null;
+        using var completed = new ManualResetEventSlim();
+
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                ContextMenu menu = TaskbarContextMenu.Build();
+                Assert.Equal(SystemFonts.MenuFontFamily, menu.FontFamily);
+
+                string[] headers = menu.Items
+                    .OfType<MenuItem>()
+                    .Select(static item => item.Header?.ToString() ?? string.Empty)
+                    .ToArray();
+                Assert.Contains("Settings Palette...", headers);
+                Assert.DoesNotContain(headers, static header => header.Contains('â'));
+            }
+            catch (Exception ex)
+            {
+                failure = ex;
+            }
+            finally
+            {
+                completed.Set();
+            }
+        });
+
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        Assert.True(completed.Wait(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken), "Context menu did not finish building.");
         thread.Join();
         Assert.Null(failure);
     }

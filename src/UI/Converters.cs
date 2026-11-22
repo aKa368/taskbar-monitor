@@ -28,3 +28,13 @@ public sealed class InvertedBooleanToVisibilityConverter : IValueConverter
     public object ConvertBack(object? value, System.Type targetType, object? parameter, System.Globalization.CultureInfo culture)
         => value is Visibility.Visible;
 }
+
+/// <summary>Non-empty string → Visible, null or whitespace → Collapsed.</summary>
+public sealed class StringNotEmptyToVisibilityConverter : IValueConverter
+{
+    public object Convert(object? value, System.Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+        => string.IsNullOrWhiteSpace(value as string) ? Visibility.Collapsed : Visibility.Visible;
+
+    public object ConvertBack(object? value, System.Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+        => Binding.DoNothing;
+}

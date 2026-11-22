@@ -54,7 +54,7 @@ public sealed class AdaptiveUniformPanelTests
     [Fact]
     public void AccountThreePodsAreBoundedAtInstalledWidth()
     {
-        string?[] keys = ["CommandCode", "OpenCode", "Codex"];
+        string?[] keys = ["CommandCode", "OpenCode", "Antigravity"];
         var cells = AdaptiveUniformPanel.PlanPlacements(keys, 2, 2, null);
 
         Assert.Equal(118.5, AdaptiveUniformPanel.CellWidth(240, 2, 3));
@@ -70,8 +70,21 @@ public sealed class AdaptiveUniformPanelTests
     [InlineData(320, 158.5)]
     public void ThreeAccountCardsNeverOverlapAcrossRealWidths(double width, double expectedCellWidth)
     {
-        var cells = AdaptiveUniformPanel.PlanPlacements(["CommandCode", "OpenCode", "Codex"], 2, 2, null);
+        var cells = AdaptiveUniformPanel.PlanPlacements(["CommandCode", "OpenCode", "Antigravity"], 2, 2, null);
         Assert.Equal(expectedCellWidth, AdaptiveUniformPanel.CellWidth(width, 2, 3));
         Assert.Equal(cells.Count, cells.Distinct().Count());
+    }
+
+    [Fact]
+    public void VerticalTaskbarAdaptsToSingleColumnStack()
+    {
+        Assert.Equal((4, 1), AdaptiveUniformPanel.CalculateGrid(4, 48, 118, 2));
+
+        string?[] keys = ["cpu", "ram", "gpu", "network"];
+        var cells = AdaptiveUniformPanel.PlanPlacements(keys, 4, 1, "network");
+        Assert.Equal(4, cells.Distinct().Count());
+        Assert.All(cells, cell => Assert.Equal(0, cell.Column));
+        for (int i = 0; i < 4; i++)
+            Assert.Contains(cells, c => c.Row == i);
     }
 }

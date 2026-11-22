@@ -9,6 +9,44 @@ public readonly record struct NetworkMetrics(double SentBytesPerSecond, double R
 public interface INetworkSnapshotProvider { NetworkSnapshot GetSnapshot(); }
 
 /// <summary>
+/// Decides which Windows adapters own a real wire segment. A VPN tunnel NIC
+/// (Wintun / sing-tun / WireGuard / Tailscale) mirrors every byte its physical
+/// carrier already counted, so summing both doubled the reported throughput.
+/// </summary>
+public static class NetworkAdapterFilter
+{
+    private static readonly string[] VirtualMarkers =
+    [
+        "tunnel", "wintun", "sing-tun", "tap-", "wireguard", "tailscale",
+        "zerotier", "openvpn", "hyper-v virtual", "vmware", "virtualbox", "npcap",
+        "npcap loopback", "loopback", "clash", "v2ray", "vpn"
+    ];
+
+    public static bool IsMeasurable(
+        NetworkInterfaceType type,
+        OperationalStatus status,
+        long speed,
+        string? description,
+        int physicalAddressBytes) =>
+        status == OperationalStatus.Up
+        && speed > 0
+        && type is not NetworkInterfaceType.Loopback and not NetworkInterfaceType.Tunnel
+        // Wintun (sing-box / Xray TUN) has no MAC address and reports IfType 53,
+        // which .NET does not map to Tunnel, so the type check alone let it through.
+        && physicalAddressBytes > 0
+        && !LooksVirtual(description);
+
+    private static bool LooksVirtual(string? description)
+    {
+        if (string.IsNullOrWhiteSpace(description)) return false;
+        foreach (string marker in VirtualMarkers)
+            if (description.Contains(marker, StringComparison.OrdinalIgnoreCase))
+                return true;
+        return false;
+    }
+}
+
+/// <summary>
 /// Aggregates operational, non-loopback physical adapters. Adapter topology is
 /// refreshed periodically; byte counters are read from the cached interfaces.
 /// </summary>
@@ -24,9 +62,9 @@ public sealed class PhysicalNetworkSnapshotProvider : INetworkSnapshotProvider
         ulong sent = 0, received = 0, speed = 0;
         foreach (NetworkInterface adapter in _adapters)
         {
-            if (adapter.OperationalStatus != OperationalStatus.Up ||
-                adapter.NetworkInterfaceType is NetworkInterfaceType.Loopback or NetworkInterfaceType.Tunnel ||
-                adapter.Speed <= 0)
+            if (!NetworkAdapterFilter.IsMeasurable(
+                    adapter.NetworkInterfaceType, adapter.OperationalStatus, adapter.Speed,
+                    adapter.Description, MacBytes(adapter)))
                 continue;
 
             try
@@ -40,6 +78,12 @@ public sealed class PhysicalNetworkSnapshotProvider : INetworkSnapshotProvider
         }
 
         return new(sent, received, speed, DateTimeOffset.UtcNow);
+    }
+
+    private static int MacBytes(NetworkInterface adapter)
+    {
+        try { return adapter.GetPhysicalAddress().GetAddressBytes().Length; }
+        catch (NetworkInformationException) { return 0; }
     }
 
     private void RefreshTopologyIfDue()

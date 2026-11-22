@@ -6,13 +6,13 @@
 
 #define MyAppName "TaskbarMonitor"
 #ifndef MyAppVersion
-  #define MyAppVersion "1.0.2"
+  #define MyAppVersion "1.0.5"
 #endif
 #define MyAppPublisher "aKa368"
 #define MyAppURL "https://github.com/aKa368/taskbar-monitor"
 #define MyAppExeName "TaskbarMonitor.exe"
 #ifndef MyReleaseRoot
-  #define MyReleaseRoot "release-1.0.2"
+  #define MyReleaseRoot "release-1.0.5"
 #endif
 
 

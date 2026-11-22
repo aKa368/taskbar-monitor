@@ -70,12 +70,14 @@ internal sealed class TaskbarHostPlatformAdapter(Window window, FrameworkElement
         window.Topmost = _originalTopmost;
         window.Width = _originalWidth;
         window.Height = _originalHeight;
+        contentElement.LayoutTransform = System.Windows.Media.Transform.Identity;
 
         _hasPreparedWindow = false;
     }
 
     public void ApplyContentBounds(double maxWidth, double width, double height)
     {
+        contentElement.LayoutTransform = System.Windows.Media.Transform.Identity;
         contentElement.MaxWidth = maxWidth;
         contentElement.Width = width;
         contentElement.Height = height;

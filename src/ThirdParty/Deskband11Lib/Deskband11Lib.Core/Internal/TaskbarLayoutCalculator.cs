@@ -32,6 +32,9 @@ internal sealed class TaskbarLayoutCalculator(TaskbarWindowLocator taskbarWindow
         if (!TryGetWindowRectangle(taskbarWindowLocator.TaskbarWindow, out var taskbarRectangle)) return default;
         scaleFactor = NormalizeScaleFactor(scaleFactor);
 
+        if ((taskbarRectangle.bottom - taskbarRectangle.top) > (taskbarRectangle.right - taskbarRectangle.left))
+            return CalculateVertical(taskbarRectangle, requestedWidth, requestedHeight, scaleFactor, ownSlot, siblingSlots);
+
         var rowRectangle = TryGetWindowRectangle(taskbarWindowLocator.RebarWindow, out var rebarRectangle) ? rebarRectangle : taskbarRectangle;
         var searchLeft = taskbarRectangle.left;
         var searchRight = ResolveNotificationLeft(taskbarRectangle);
@@ -93,6 +96,7 @@ internal sealed class TaskbarLayoutCalculator(TaskbarWindowLocator taskbarWindow
         {
             TaskbarContentPlacement.LeftEdge => alignment == TaskbarAlignment.Center ? TaskbarContentPlacement.LeftEdge : TaskbarContentPlacement.BeforeNotificationArea,
             TaskbarContentPlacement.BeforeStartButton => alignment == TaskbarAlignment.Center ? TaskbarContentPlacement.BeforeStartButton : TaskbarContentPlacement.BeforeNotificationArea,
+            TaskbarContentPlacement.AfterTaskbarButtons => alignment == TaskbarAlignment.Center ? TaskbarContentPlacement.AfterTaskbarButtons : TaskbarContentPlacement.BeforeNotificationArea,
             TaskbarContentPlacement.AccountArea => TaskbarContentPlacement.AccountArea,
             TaskbarContentPlacement.Auto => leftAvailableWidth > rightAvailableWidth ? TaskbarContentPlacement.LeftEdge : TaskbarContentPlacement.BeforeNotificationArea,
             _ => TaskbarContentPlacement.BeforeNotificationArea
@@ -164,7 +168,7 @@ internal sealed class TaskbarLayoutCalculator(TaskbarWindowLocator taskbarWindow
     }
 
     private static bool IsRightGapPlacement(TaskbarContentPlacement placement) =>
-        placement is TaskbarContentPlacement.AccountArea or TaskbarContentPlacement.BeforeNotificationArea;
+        placement is TaskbarContentPlacement.AccountArea or TaskbarContentPlacement.BeforeNotificationArea or TaskbarContentPlacement.AfterTaskbarButtons;
 
     private static int AllocateProportionally(List<TaskbarSlotInfo> slots, List<int> desiredWidths, int availableWidth, Dictionary<nint, int> allocations)
     {
@@ -233,7 +237,7 @@ internal sealed class TaskbarLayoutCalculator(TaskbarWindowLocator taskbarWindow
             _ => false
         };
 
-        if (!useLeftGap) return (rightGap.Left, rightGap.Right, placement == TaskbarContentPlacement.AccountArea);
+        if (!useLeftGap) return (rightGap.Left, rightGap.Right, placement is TaskbarContentPlacement.AccountArea or TaskbarContentPlacement.AfterTaskbarButtons);
 
         var leftAlign = placement is TaskbarContentPlacement.LeftEdge or TaskbarContentPlacement.Auto or TaskbarContentPlacement.AccountArea;
         return (leftGap.Left, leftGap.Right, leftAlign);
@@ -279,6 +283,90 @@ internal sealed class TaskbarLayoutCalculator(TaskbarWindowLocator taskbarWindow
         };
 
         return rectangle.right > rectangle.left && rectangle.bottom > rectangle.top;
+    }
+
+    private TaskbarLayoutSnapshot CalculateVertical(RECT taskbarRectangle, double requestedWidth, double requestedHeight, double scaleFactor, TaskbarSlotInfo? ownSlot, IReadOnlyList<TaskbarSlotInfo> siblingSlots)
+    {
+        var taskbarWidth = taskbarRectangle.right - taskbarRectangle.left;
+        var taskbarHeight = taskbarRectangle.bottom - taskbarRectangle.top;
+
+        var hasRebar = TryGetWindowRectangle(taskbarWindowLocator.RebarWindow, out var rebarRectangle) && rebarRectangle.bottom > rebarRectangle.top;
+
+        var notificationTop = taskbarRectangle.bottom;
+        if (options.TrackNotificationArea && TryGetWindowRectangle(taskbarWindowLocator.NotificationWindow, out var notificationRectangle) && notificationRectangle.top > taskbarRectangle.top)
+        {
+            notificationTop = notificationRectangle.top;
+        }
+
+        var startTop = hasRebar ? rebarRectangle.top : taskbarRectangle.top + taskbarHeight / 3;
+        var startWindow = PInvoke.FindWindowEx(taskbarWindowLocator.TaskbarWindow, HWND.Null, "Start", null);
+        if (!startWindow.IsNull && TryGetWindowRectangle(startWindow, out var startRectangle) && startRectangle.bottom > startRectangle.top)
+        {
+            startTop = startRectangle.top;
+        }
+
+        var buttonsBottom = hasRebar ? rebarRectangle.bottom : (startTop + 60);
+
+        var topGap = Math.Max(0, startTop - taskbarRectangle.top);
+        var bottomGap = Math.Max(0, notificationTop - buttonsBottom);
+
+        int areaTop;
+        int areaBottom;
+        bool topAlign;
+        TaskbarContentPlacement resolvedPlacement;
+
+        if ((options.Placement is TaskbarContentPlacement.AccountArea or TaskbarContentPlacement.LeftEdge or TaskbarContentPlacement.BeforeStartButton) && topGap >= 80)
+        {
+            areaTop = taskbarRectangle.top;
+            areaBottom = startTop;
+            topAlign = options.Placement != TaskbarContentPlacement.BeforeStartButton;
+            resolvedPlacement = options.Placement;
+        }
+        else
+        {
+            areaTop = buttonsBottom;
+            areaBottom = notificationTop;
+            topAlign = options.Placement is TaskbarContentPlacement.AccountArea or TaskbarContentPlacement.AfterTaskbarButtons;
+            resolvedPlacement = options.Placement == TaskbarContentPlacement.AccountArea
+                ? TaskbarContentPlacement.AccountArea
+                : options.Placement;
+        }
+
+        var availableHeight = Math.Max(0, areaBottom - areaTop);
+        if (availableHeight <= 0)
+            return new TaskbarLayoutSnapshot(0, 0, 0, 0, 0, scaleFactor, false, resolvedPlacement);
+
+        var targetHeight = options.Placement == TaskbarContentPlacement.AccountArea ? 100.0 : 130.0;
+        var requestedHeightInPixels = Math.Max(40, (int)Math.Ceiling(targetHeight * scaleFactor));
+        if (requestedHeightInPixels > availableHeight)
+            requestedHeightInPixels = availableHeight;
+
+        var effectiveOwnSlot = ownSlot.HasValue && ownSlot.Value.ActualPlacement != resolvedPlacement ? ownSlot.Value with { ActualPlacement = resolvedPlacement } : ownSlot;
+        var sharesBottomGap = areaTop == buttonsBottom;
+        var siblingsInSameArea = FilterSiblingsInSameArea(siblingSlots, resolvedPlacement, getEffectiveMonitorIdentity(), sharesBottomGap);
+
+        double allocatedHeight;
+        double offsetY;
+
+        if (effectiveOwnSlot.HasValue && siblingsInSameArea.Count > 0)
+        {
+            var allocation = AllocateWidth(effectiveOwnSlot.Value, siblingsInSameArea, availableHeight, scaleFactor, sharesBottomGap);
+            allocatedHeight = Math.Min(allocation.Width, availableHeight);
+            offsetY = allocation.Offset;
+        }
+        else
+        {
+            allocatedHeight = Math.Min(requestedHeightInPixels, availableHeight);
+            offsetY = 0;
+        }
+
+        if (allocatedHeight <= 0)
+            return new TaskbarLayoutSnapshot(0, 0, 0, 0, 0, scaleFactor, false, resolvedPlacement);
+
+        var x = 0;
+        var y = (topAlign ? areaTop + offsetY : areaBottom - offsetY - allocatedHeight) - taskbarRectangle.top;
+
+        return new TaskbarLayoutSnapshot(x, y, taskbarWidth, allocatedHeight, availableHeight, scaleFactor, true, resolvedPlacement);
     }
 }
 

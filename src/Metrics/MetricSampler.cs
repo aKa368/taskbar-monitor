@@ -84,18 +84,21 @@ public sealed class MetricRingBuffer
 public sealed class MetricSampler : IDisposable
 {
     private readonly System.Timers.Timer? _timer;
+    private readonly bool _useSharedClock;
     private IDisposable? _sharedSubscription;
     private readonly IReadOnlyDictionary<string, Func<double>> _readers;
     private readonly Dictionary<string, MetricRingBuffer> _histories;
     private int _sampling;
+    private int _disposed;
 
     public MetricSampler(IReadOnlyDictionary<string, Func<double>> readers, double intervalMilliseconds = 1000, int historyCapacity = 60, bool useSharedClock = false)
     {
         _readers = readers ?? throw new ArgumentNullException(nameof(readers));
+        if (intervalMilliseconds <= 0 || double.IsNaN(intervalMilliseconds) || double.IsInfinity(intervalMilliseconds))
+            throw new ArgumentOutOfRangeException(nameof(intervalMilliseconds));
         _histories = readers.Keys.ToDictionary(k => k, _ => new MetricRingBuffer(historyCapacity));
-        if (useSharedClock)
-            _sharedSubscription = SharedMetricSamplerClock.Subscribe(SampleNow);
-        else
+        _useSharedClock = useSharedClock;
+        if (!useSharedClock)
         {
             _timer = new System.Timers.Timer(intervalMilliseconds) { AutoReset = true };
             _timer.Elapsed += OnElapsed;
@@ -103,7 +106,17 @@ public sealed class MetricSampler : IDisposable
     }
 
     public bool IsRunning => _sharedSubscription is not null || (_timer?.Enabled ?? false);
-    public void Start() => _timer?.Start();
+    public void Start()
+    {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+        if (_useSharedClock)
+        {
+            _sharedSubscription ??= SharedMetricSamplerClock.Subscribe(SampleNow);
+            return;
+        }
+
+        _timer?.Start();
+    }
     public void Stop()
     {
         _timer?.Stop();
@@ -151,6 +164,9 @@ public sealed class MetricSampler : IDisposable
 
     public void Dispose()
     {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            return;
+
         Stop();
         if (_timer is not null)
         {

@@ -13,18 +13,18 @@ public sealed class UsageTextFormatterTests
     [Fact]
     public void AgentDisplayIsUnavailableForSuccessfulDataWithoutValues() =>
         Assert.Equal("N/A", UsageTextFormatter.FormatAgentDisplay(
-            new UsageData { Agent = AgentIds.Codex, Source = "api" }, showReset: false));
+            new UsageData { Agent = AgentIds.Antigravity, Source = "api" }, showReset: false));
 
     [Fact]
     public void AgentDisplayIsErrorWhenFailureHasNoLastKnownValue() =>
         Assert.Equal("ERR", UsageTextFormatter.FormatAgentDisplay(
-            UsageData.Failure(AgentIds.Codex, "redacted failure"), showReset: false));
+            UsageData.Failure(AgentIds.Antigravity, "redacted failure"), showReset: false));
 
     [Fact]
     public void AgentDisplayKeepsStaleSevenDayValueAndMarksError() =>
         Assert.Equal("7d 80% left · ERR", UsageTextFormatter.FormatAgentDisplay(new UsageData
         {
-            Agent = AgentIds.Codex,
+            Agent = AgentIds.Antigravity,
             Source = "api",
             UsedPercent7d = 20,
             Error = "redacted failure"
@@ -82,7 +82,7 @@ public sealed class UsageTextFormatterTests
     public void CompactAccountQuotaFitsSplitHostCards() =>
         Assert.Equal("5h77 · 7d94", UsageTextFormatter.FormatCompactAgentDisplay(new UsageData
         {
-            Agent = AgentIds.Codex,
+            Agent = AgentIds.Antigravity,
             Source = "api",
             UsedPercent5h = 23,
             UsedPercent7d = 6
@@ -92,11 +92,28 @@ public sealed class UsageTextFormatterTests
     public void CompactAccountQuotaKeepsStaleErrorVisible() =>
         Assert.Equal("7d80 · ERR", UsageTextFormatter.FormatCompactAgentDisplay(new UsageData
         {
-            Agent = AgentIds.Codex,
+            Agent = AgentIds.Antigravity,
             Source = "api",
             UsedPercent7d = 20,
             Error = "redacted"
         }));
+
+    [Theory]
+    [InlineData(0, "0")]
+    [InlineData(450, "450")]
+    [InlineData(999, "999")]
+    [InlineData(1000, "1K")]
+    [InlineData(1500, "1.5K")]
+    [InlineData(10521, "10.5K")]
+    [InlineData(1000000, "1M")]
+    [InlineData(1200000, "1.2M")]
+    [InlineData(1000000000, "1B")]
+    [InlineData(1700000000, "1.7B")]
+    [InlineData(1754978756, "1.8B")]
+    public void FormatCompact_FormatsValuesCorrectly(long val, string expected)
+    {
+        Assert.Equal(expected, UsageTextFormatter.FormatCompact(val));
+    }
 
     [Theory]
     [InlineData(true, 3, "GPU 3%")]

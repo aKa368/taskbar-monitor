@@ -16,6 +16,7 @@ internal sealed partial class TaskbarWindowMonitorService : IDisposable
     private readonly Lock _gate = new();
     private readonly Timer _pollingTimer;
     private HWND _lastTaskbarWindow;
+    private RECT _lastTaskbarRect;
     private int _lastRefreshRateHz;
     private bool _isStarted;
     private bool _isDisposed;
@@ -33,6 +34,8 @@ internal sealed partial class TaskbarWindowMonitorService : IDisposable
 
     public event EventHandler? TaskbarWindowDisappeared;
 
+    public event EventHandler? TaskbarGeometryChanged;
+
     public event EventHandler? PreferredMonitorRestored;
 
     public event Action<int>? RefreshRateChanged;
@@ -44,8 +47,10 @@ internal sealed partial class TaskbarWindowMonitorService : IDisposable
             if (_isDisposed || _isStarted) return;
 
             _lastTaskbarWindow = ResolveTaskbarWindow();
+            if (!_lastTaskbarWindow.IsNull)
+                PInvoke.GetWindowRect(_lastTaskbarWindow, out _lastTaskbarRect);
             _lastRefreshRateHz = 0;
-            _pollingTimer.Change(TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+            _pollingTimer.Change(TimeSpan.FromMilliseconds(500), TimeSpan.FromMilliseconds(500));
             _isStarted = true;
         }
 
@@ -90,7 +95,17 @@ internal sealed partial class TaskbarWindowMonitorService : IDisposable
                 }
                 else
                 {
+                    PInvoke.GetWindowRect(taskbarWindow, out _lastTaskbarRect);
                     TaskbarWindowRecreated?.Invoke(this, EventArgs.Empty);
+                }
+            }
+            else if (!taskbarWindow.IsNull && PInvoke.GetWindowRect(taskbarWindow, out var currentRect))
+            {
+                if (currentRect.left != _lastTaskbarRect.left || currentRect.top != _lastTaskbarRect.top ||
+                    currentRect.right != _lastTaskbarRect.right || currentRect.bottom != _lastTaskbarRect.bottom)
+                {
+                    _lastTaskbarRect = currentRect;
+                    TaskbarGeometryChanged?.Invoke(this, EventArgs.Empty);
                 }
             }
         }

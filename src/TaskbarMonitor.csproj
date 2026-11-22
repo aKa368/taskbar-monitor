@@ -10,10 +10,9 @@
     <UseWindowsForms>true</UseWindowsForms>
     <RootNamespace>TaskbarMonitor</RootNamespace>
     <AssemblyName>TaskbarMonitor</AssemblyName>
-    <Version>1.0.2</Version>
-    <FileVersion>1.0.2.0</FileVersion>
-    <AssemblyVersion>1.0.2.0</AssemblyVersion>
-    <InformationalVersion>1.0.2</InformationalVersion>
+    <FileVersion>$(Version).0</FileVersion>
+    <AssemblyVersion>$(Version).0</AssemblyVersion>
+    <InformationalVersion>$(Version)</InformationalVersion>
     <Company>aKa368</Company>
     <Product>TaskbarMonitor</Product>
     <Description>Windows 11 taskbar system monitor</Description>

@@ -2,5 +2,6 @@
   <PropertyGroup>
     <!-- Reproducible release restores: packages.lock.json is committed. -->
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <Version>1.0.5</Version>
   </PropertyGroup>
 </Project>

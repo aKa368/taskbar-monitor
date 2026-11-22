@@ -14,9 +14,7 @@ public partial class SystemTaskbarContent : UserControl
     protected override void OnMouseRightButtonUp(MouseButtonEventArgs e)
     {
         base.OnMouseRightButtonUp(e);
-        var menu = TaskbarContextMenu.Build();
-        menu.PlacementTarget = this;
-        menu.IsOpen = true;
+        TaskbarContextMenu.ShowFor(this);
         e.Handled = true;
     }
 }

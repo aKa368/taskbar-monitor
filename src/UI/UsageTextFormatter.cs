@@ -67,6 +67,17 @@ public static class UsageTextFormatter
         return $"{usedPercent.Value:F0}%{resetText}";
     }
 
+    public static string FormatCompact(long val)
+    {
+        if (val >= 1_000_000_000)
+            return (val / 1e9).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + "B";
+        if (val >= 1_000_000)
+            return (val / 1e6).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + "M";
+        if (val >= 1_000)
+            return (val / 1e3).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + "K";
+        return val.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    }
+
     public static string FormatResetTime(DateTime? resetsAt)
     {
         if (!resetsAt.HasValue) return string.Empty;

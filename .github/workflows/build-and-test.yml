@@ -80,10 +80,7 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
-    env:
-      CODESIGN_TIMESTAMP_URL: ${{ secrets.CODESIGN_TIMESTAMP_URL }}
-      CODESIGN_EXPECTED_PUBLISHER: ${{ secrets.CODESIGN_EXPECTED_PUBLISHER }}
-      CODESIGN_EXPECTED_THUMBPRINT: ${{ secrets.CODESIGN_EXPECTED_THUMBPRINT }}
+      id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -151,32 +148,77 @@ jobs:
             'installer\TaskbarMonitor.iss'
           if ($LASTEXITCODE -ne 0) { throw 'ISCC failed.' }
 
-      - name: Decode code-signing certificate
+      - name: Run clean-VM installer smoke test
         shell: pwsh
-        env:
-          CODESIGN_PFX_BASE64: ${{ secrets.CODESIGN_PFX_BASE64 }}
         run: |
-          if ([string]::IsNullOrWhiteSpace($env:CODESIGN_PFX_BASE64)) {
-            throw 'CODESIGN_PFX_BASE64 is not configured for the protected release environment.'
-          }
-          $pfxPath = Join-Path $env:RUNNER_TEMP 'TaskbarMonitor-CodeSigning.pfx'
-          [IO.File]::WriteAllBytes(
-            $pfxPath,
-            [Convert]::FromBase64String($env:CODESIGN_PFX_BASE64))
-          "CODESIGN_PFX_PATH=$pfxPath" >> $env:GITHUB_ENV
+          ./jobs/Test-CleanVmInstaller.ps1 `
+            -InstallerPath '${{ steps.version.outputs.installer }}' `
+            -ReportDirectory 'artifacts/clean-vm-installer'
 
-      - name: Sign and verify installer
+      - name: Upload clean-VM installer test log
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: TaskbarMonitor-${{ steps.version.outputs.version }}-clean-vm-test
+          path: artifacts/clean-vm-installer
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Azure login for Artifact Signing
+        uses: azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Sign installer with Microsoft Artifact Signing
+        uses: azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2
+        with:
+          endpoint: ${{ secrets.ARTIFACT_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ secrets.ARTIFACT_SIGNING_ACCOUNT_NAME }}
+          certificate-profile-name: ${{ secrets.ARTIFACT_SIGNING_CERTIFICATE_PROFILE_NAME }}
+          files: ${{ github.workspace }}\${{ steps.version.outputs.installer }}
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
+      - name: Verify signed installer and generate release metadata
         shell: pwsh
-        env:
-          CODESIGN_PFX_PASSWORD: ${{ secrets.CODESIGN_PFX_PASSWORD }}
         run: |
-          if ([string]::IsNullOrWhiteSpace($env:CODESIGN_PFX_PASSWORD)) {
-            throw 'CODESIGN_PFX_PASSWORD is not configured for the protected release environment.'
+          $installer = '${{ steps.version.outputs.installer }}'
+          if (-not (Test-Path -LiteralPath $installer -PathType Leaf)) {
+            throw "Signed installer not found: $installer"
           }
-          pwsh -NoProfile -File .\jobs\Sign-Release.ps1 `
-            -ArtifactPath '${{ steps.version.outputs.installer }}' `
-            -HashOutputPath '${{ steps.version.outputs.installer }}.sha256' `
-            -SummaryOutputPath '${{ steps.version.outputs.summary }}'
+          $signToolCommand = Get-Command signtool.exe -ErrorAction SilentlyContinue
+          if ($signToolCommand) {
+            $signToolPath = $signToolCommand.Source
+          } else {
+            $signToolPath = @(
+              Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin',
+                (Join-Path $env:LOCALAPPDATA 'ArtifactSigning') -Filter signtool.exe -Recurse -ErrorAction SilentlyContinue
+            ) | Sort-Object FullName -Descending | Select-Object -First 1 -ExpandProperty FullName
+          }
+          if (-not $signToolPath) { throw 'SignTool was not found on the Windows runner.' }
+          & $signToolPath verify /pa /v $installer
+          if ($LASTEXITCODE -ne 0) { throw 'SignTool verification failed.' }
+          $signature = Get-AuthenticodeSignature -FilePath $installer
+          if ($signature.Status -ne 'Valid') {
+            throw "Authenticode status is $($signature.Status), expected Valid."
+          }
+          if (-not $signature.SignerCertificate) { throw 'Signer certificate is missing.' }
+          $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $installer).Hash.ToLowerInvariant()
+          "$hash  $installer" | Set-Content -LiteralPath "${installer}.sha256" -Encoding ascii
+          $summary = [ordered]@{
+            artifact = $installer
+            version = '${{ steps.version.outputs.version }}'
+            signatureStatus = [string]$signature.Status
+            signerSubject = [string]$signature.SignerCertificate.Subject
+            signerThumbprint = [string]$signature.SignerCertificate.Thumbprint
+            signerNotAfter = [string]$signature.SignerCertificate.NotAfter
+            timestampSubject = if ($signature.TimeStamperCertificate) { [string]$signature.TimeStamperCertificate.Subject } else { $null }
+            sha256 = $hash
+          }
+          $summary | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath '${{ steps.version.outputs.summary }}' -Encoding utf8
 
       - name: Upload signed installer
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

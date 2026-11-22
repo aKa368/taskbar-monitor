@@ -14,8 +14,11 @@ public partial class App : Application
     private static Mutex? _singleInstanceMutex;
     private TaskbarContentViewModel? _viewModel;
     private TaskbarPairLifecycle? _pairLifecycle;
+    private FloatingMonitorWindow? _floatingWindow;
+    private string _currentMode = string.Empty;
     private TrayIconService? _trayIcon;
     private MemoryTelemetry? _memoryTelemetry;
+    private WorkingSetTrimmer? _workingSetTrimmer;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -29,14 +32,61 @@ public partial class App : Application
         }
 
         _memoryTelemetry = new MemoryTelemetry();
+        _workingSetTrimmer = new WorkingSetTrimmer(TimeSpan.FromSeconds(30));
 
         UpdateAutostartRegistry(ConfigManager.Instance.Config.Autostart);
-        ConfigManager.Instance.ConfigReloaded += (_, cfg) => UpdateAutostartRegistry(cfg.Autostart);
         _trayIcon = new TrayIconService();
-
         _viewModel = new TaskbarContentViewModel();
-        _pairLifecycle = new TaskbarPairLifecycle(() => new TaskbarWindowPair(_viewModel));
-        await _pairLifecycle.StartAsync();
+
+        ApplyMode(ConfigManager.Instance.Config.Mode);
+
+        _ = Dispatcher.InvokeAsync(async () =>
+        {
+            await Task.Delay(2000);
+            WorkingSetTrimmer.TrimWorkingSet();
+        }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+
+        ConfigManager.Instance.ConfigReloaded += (_, cfg) =>
+        {
+            UpdateAutostartRegistry(cfg.Autostart);
+            Dispatcher.Invoke(() => ApplyMode(cfg.Mode));
+        };
+    }
+
+    private void ApplyMode(string mode)
+    {
+        if (string.Equals(_currentMode, mode, StringComparison.OrdinalIgnoreCase))
+            return;
+        _currentMode = mode;
+
+        if (string.Equals(mode, "Floating", StringComparison.OrdinalIgnoreCase))
+        {
+            if (_pairLifecycle != null)
+            {
+                _pairLifecycle.RequestShutdown();
+                _pairLifecycle = null;
+            }
+            if (_floatingWindow == null && _viewModel != null)
+            {
+                _floatingWindow = new FloatingMonitorWindow(_viewModel);
+                _floatingWindow.Closed += (_, _) => _floatingWindow = null;
+                _floatingWindow.Show();
+            }
+        }
+        else
+        {
+            if (_floatingWindow != null)
+            {
+                _floatingWindow.Close();
+                _floatingWindow = null;
+            }
+            if (_viewModel != null)
+            {
+                _pairLifecycle?.RequestShutdown();
+                _pairLifecycle = new TaskbarPairLifecycle(() => new TaskbarWindowPair(_viewModel));
+                _ = _pairLifecycle.StartAsync();
+            }
+        }
     }
 
     private static void UpdateAutostartRegistry(bool enable)
@@ -67,6 +117,7 @@ public partial class App : Application
         _pairLifecycle?.RequestShutdown();
         _viewModel?.Dispose();
         _trayIcon?.Dispose();
+        _workingSetTrimmer?.Dispose();
         _memoryTelemetry?.Dispose();
         _singleInstanceMutex?.Dispose();
         base.OnExit(e);

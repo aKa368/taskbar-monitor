@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:ui="clr-namespace:TaskbarMonitor.UI"
+             FontFamily="{Binding FontFamily}"
              mc:Ignorable="d" d:DesignHeight="48" d:DesignWidth="560">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />

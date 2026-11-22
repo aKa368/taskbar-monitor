@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using TaskbarMonitor.Config;
+using TaskbarMonitor.Metrics;
 
 namespace TaskbarMonitor.UI.Layout;
 
@@ -39,7 +40,6 @@ public sealed class LayoutManager
         bool agentsSame = _currentConfig != null
             && _currentConfig.Agents.CommandCode == config.Agents.CommandCode
             && _currentConfig.Agents.OpenCode == config.Agents.OpenCode
-            && _currentConfig.Agents.Codex == config.Agents.Codex
             && _currentConfig.Agents.Antigravity == config.Agents.Antigravity
             && _currentConfig.Agents.Claude == config.Agents.Claude;
         bool metricsSame = _currentConfig != null
@@ -49,7 +49,8 @@ public sealed class LayoutManager
             && _currentConfig.Metrics.Disk == config.Metrics.Disk
             && _currentConfig.Metrics.Gpu == config.Metrics.Gpu
             && _currentConfig.Metrics.Temperature == config.Metrics.Temperature
-            && _currentConfig.Metrics.RamTemperature == config.Metrics.RamTemperature;
+            && _currentConfig.Metrics.RamTemperature == config.Metrics.RamTemperature
+            && _currentConfig.Metrics.GameOverlay == config.Metrics.GameOverlay;
 
         if (!forceRebuild
             && _currentKind == kind
@@ -69,29 +70,44 @@ public sealed class LayoutManager
 
         if (def.ShowMetricPods)
         {
-            // Grid is deliberately ordered by stable columns: CPU/RAM,
-            // GPU/Disk, then Network last in its own outer column.
-            var metricOrder = kind == WidgetLayoutKind.Grid
-                ? new[] { ("cpu", "CPU", config.Metrics.Cpu), ("ram", "RAM", config.Metrics.Ram),
-                          ("gpu", "GPU", config.Metrics.Gpu), ("disk", "DISK", config.Metrics.Disk),
-                          ("network", "NET", config.Metrics.Network) }
-                : new[] { ("cpu", "CPU", config.Metrics.Cpu), ("ram", "RAM", config.Metrics.Ram),
-                          ("network", "NET", config.Metrics.Network), ("disk", "DISK", config.Metrics.Disk),
-                          ("gpu", "GPU", config.Metrics.Gpu) };
-            foreach (var (key, label, enabled) in metricOrder)
-                if (enabled) metricPods.Add(new MetricPodViewModel(key, label));
+            bool mergeApu = HardwareTopology.IsSharedApu && config.Metrics.Cpu && config.Metrics.Gpu;
+            if (mergeApu)
+            {
+                metricPods.Add(new MetricPodViewModel("cpu_gpu", "APU"));
+                if (config.Metrics.Ram) metricPods.Add(new MetricPodViewModel("ram", "R"));
+                if (config.Metrics.Network) metricPods.Add(new MetricPodViewModel("network", "NET"));
+                if (config.Metrics.Disk) metricPods.Add(new MetricPodViewModel("disk", "DISK"));
+            }
+            else
+            {
+                // Grid is deliberately ordered by stable columns: CPU/RAM,
+                // GPU/Disk, then Network last in its own outer column.
+                var metricOrder = kind == WidgetLayoutKind.Grid
+                    ? new[] { ("cpu", "C", config.Metrics.Cpu), ("ram", "R", config.Metrics.Ram),
+                              ("gpu", "G", config.Metrics.Gpu), ("disk", "DISK", config.Metrics.Disk),
+                              ("network", "NET", config.Metrics.Network) }
+                    : new[] { ("cpu", "C", config.Metrics.Cpu), ("ram", "R", config.Metrics.Ram),
+                              ("network", "NET", config.Metrics.Network), ("disk", "DISK", config.Metrics.Disk),
+                              ("gpu", "G", config.Metrics.Gpu) };
+                foreach (var (key, label, enabled) in metricOrder)
+                    if (enabled) metricPods.Add(new MetricPodViewModel(key, label));
+            }
+
+            if (config.Metrics.GameOverlay && kind != WidgetLayoutKind.Grid)
+            {
+                metricPods.Add(new MetricPodViewModel("fps", "FPS") { IsVisible = false });
+                metricPods.Add(new MetricPodViewModel("ping", "PING") { IsVisible = false });
+            }
         }
 
         if (def.ShowAgentPods)
         {
-            // In Grid, put ChatGPT usage beside GPU and local providers beside
-            // Network. The internal key remains Codex for config/auth compatibility.
             var agentOrder = kind == WidgetLayoutKind.Grid
-                ? new[] { ("Codex", "GPT", config.Agents.Codex), ("Claude", "CL", config.Agents.Claude),
+                ? new[] { ("Claude", "CL", config.Agents.Claude),
                           ("OpenCode", "OC", config.Agents.OpenCode), ("CommandCode", "CC", config.Agents.CommandCode),
                           ("Antigravity", "AGY", config.Agents.Antigravity) }
                 : new[] { ("CommandCode", "CC", config.Agents.CommandCode), ("OpenCode", "OC", config.Agents.OpenCode),
-                          ("Codex", "GPT", config.Agents.Codex), ("Antigravity", "AGY", config.Agents.Antigravity),
+                          ("Antigravity", "AGY", config.Agents.Antigravity),
                           ("Claude", "CL", config.Agents.Claude) };
             foreach (var (key, label, enabled) in agentOrder)
                 if (enabled) agentPods.Add(new AgentPodViewModel(key, label) { ColorHex = GetAgentColor(config, key) });
@@ -101,15 +117,15 @@ public sealed class LayoutManager
         {
             _rows.Add(metricPods);
             _rows.Add(agentPods);
-            // Pods = phẳng (cho ItemsControl đơn giản nếu cần)
             foreach (var p in metricPods) _pods.Add(p);
             foreach (var p in agentPods) _pods.Add(p);
         }
         else
         {
+            _rows.Add(metricPods);
+            _rows.Add(agentPods);
             foreach (var p in metricPods) _pods.Add(p);
             foreach (var p in agentPods) _pods.Add(p);
-            _rows.Add(_pods);
         }
 
         _currentKind = kind;
@@ -122,7 +138,6 @@ public sealed class LayoutManager
     {
         "CommandCode" => config.Colors.CommandCode,
         "OpenCode" => config.Colors.OpenCode,
-        "Codex" => config.Colors.Codex,
         "Antigravity" => config.Colors.Antigravity,
         "Claude" => config.Colors.Claude,
         _ => "#6F42C1"

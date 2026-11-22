@@ -46,6 +46,7 @@ public class TaskbarContentHostBase : IDisposable
         _layoutAnimationTimer = _platformAdapter.CreateTimer(TimeSpan.FromMilliseconds(16), OnLayoutAnimationTimerTick);
         _taskbarWindowMonitorService.TaskbarWindowRecreated += OnTaskbarWindowMonitorServiceTaskbarWindowRecreated;
         _taskbarWindowMonitorService.TaskbarWindowDisappeared += OnTaskbarWindowMonitorServiceTaskbarWindowDisappeared;
+        _taskbarWindowMonitorService.TaskbarGeometryChanged += OnTaskbarWindowMonitorServiceTaskbarGeometryChanged;
         _taskbarWindowMonitorService.PreferredMonitorRestored += OnTaskbarWindowMonitorServicePreferredMonitorRestored;
         _taskbarWindowMonitorService.RefreshRateChanged += OnTaskbarWindowMonitorServiceRefreshRateChanged;
     }
@@ -53,6 +54,8 @@ public class TaskbarContentHostBase : IDisposable
     public event EventHandler? TaskbarWindowRecreated;
 
     public event EventHandler? TaskbarWindowDisappeared;
+
+    public event EventHandler? TaskbarGeometryChanged;
 
     public bool IsAttached { get; private set; }
 
@@ -139,6 +142,11 @@ public class TaskbarContentHostBase : IDisposable
 
         ApplyHostedWindowStyle();
 
+        if (_ownSlot.HasValue && (Math.Abs(_ownSlot.Value.PreferredWidth - _options.PreferredWidth) > 0.1 || _ownSlot.Value.ActualPlacement != _options.Placement))
+        {
+            _ownSlot = _slotRegistry.Register(_windowHandle, _options.PreferredWidth, _options.Placement, _effectiveMonitorIdentity, _options.ManualSlotPriority, _options.AllowFixedSlotResize, _taskbarWindowLocator.TaskbarWindow);
+        }
+
         var scaleFactor = GetScaleFactor();
         var siblingSlots = _slotRegistry.CollectSlots(_taskbarWindowLocator.TaskbarWindow, _windowHandle);
         var snapshot = _taskbarLayoutCalculator.Calculate(_platformAdapter.RequestedWidth, _platformAdapter.RequestedHeight, scaleFactor, _ownSlot, siblingSlots);
@@ -177,10 +185,12 @@ public class TaskbarContentHostBase : IDisposable
         _layoutAnimationTimer.Dispose();
         _taskbarWindowMonitorService.TaskbarWindowRecreated -= OnTaskbarWindowMonitorServiceTaskbarWindowRecreated;
         _taskbarWindowMonitorService.TaskbarWindowDisappeared -= OnTaskbarWindowMonitorServiceTaskbarWindowDisappeared;
+        _taskbarWindowMonitorService.TaskbarGeometryChanged -= OnTaskbarWindowMonitorServiceTaskbarGeometryChanged;
         _taskbarWindowMonitorService.PreferredMonitorRestored -= OnTaskbarWindowMonitorServicePreferredMonitorRestored;
         _taskbarWindowMonitorService.RefreshRateChanged -= OnTaskbarWindowMonitorServiceRefreshRateChanged;
         TaskbarWindowRecreated = null;
         TaskbarWindowDisappeared = null;
+        TaskbarGeometryChanged = null;
 
         _slotRegistry.Dispose();
         _taskbarWindowMonitorService.Dispose();
@@ -359,6 +369,17 @@ public class TaskbarContentHostBase : IDisposable
         if (_isDisposed || !IsAttached) return;
 
         _platformAdapter.RunOnDispatcher(() => TaskbarWindowRecreated?.Invoke(this, EventArgs.Empty));
+    }
+
+    private void OnTaskbarWindowMonitorServiceTaskbarGeometryChanged(object? sender, EventArgs e)
+    {
+        if (_isDisposed || !IsAttached) return;
+
+        _platformAdapter.RunOnDispatcher(() =>
+        {
+            TaskbarGeometryChanged?.Invoke(this, EventArgs.Empty);
+            RefreshLayout();
+        });
     }
 
     private void OnTaskbarWindowMonitorServiceTaskbarWindowDisappeared(object? sender, EventArgs e)

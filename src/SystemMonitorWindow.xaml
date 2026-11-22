@@ -4,7 +4,7 @@
         Title="TaskbarMonitor System" Width="360" Height="48"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         ShowInTaskbar="False" ShowActivated="False">
-  <Grid x:Name="Root" Background="Transparent" ClipToBounds="True" UseLayoutRounding="True" SnapsToDevicePixels="True">
+  <Grid x:Name="Root" Background="Transparent" ClipToBounds="False" UseLayoutRounding="True" SnapsToDevicePixels="True">
     <ContentControl x:Name="SystemHost" VerticalContentAlignment="Stretch" HorizontalContentAlignment="Stretch" />
   </Grid>
 </Window>

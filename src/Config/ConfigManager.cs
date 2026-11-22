@@ -30,6 +30,9 @@ public class MetricsConfig
 
     [JsonPropertyName("ramTemperature")]
     public bool RamTemperature { get; set; } = false;
+
+    [JsonPropertyName("gameOverlay")]
+    public bool GameOverlay { get; set; } = true;
 }
 
 public class AgentsConfig
@@ -39,9 +42,6 @@ public class AgentsConfig
 
     [JsonPropertyName("opencode")]
     public bool OpenCode { get; set; } = true;
-
-    [JsonPropertyName("codex")]
-    public bool Codex { get; set; } = false;
 
     [JsonPropertyName("antigravity")]
     public bool Antigravity { get; set; } = false;
@@ -66,9 +66,6 @@ public class ColorsConfig
 
     [JsonPropertyName("opencode")]
     public string OpenCode { get; set; } = "#FD7E14";
-
-    [JsonPropertyName("codex")]
-    public string Codex { get; set; } = "#10A37F";
 
     [JsonPropertyName("antigravity")]
     public string Antigravity { get; set; } = "#4285F4";
@@ -123,9 +120,36 @@ public class ConfigData
     [JsonPropertyName("fontScale")]
     public double FontScale { get; set; } = 1.0;
 
+    [JsonPropertyName("fontSize")]
+    public double FontSize { get; set; } = 11.5;
+
     [JsonPropertyName("autostart")]
     public bool Autostart { get; set; } = false;
-}
+
+    [JsonPropertyName("mode")]
+    public string Mode { get; set; } = "Floating";
+
+    [JsonPropertyName("floatingX")]
+    public double? FloatingX { get; set; }
+
+    [JsonPropertyName("floatingY")]
+    public double? FloatingY { get; set; }
+
+    [JsonPropertyName("floatingLocked")]
+    public bool FloatingLocked { get; set; } = false;
+
+    [JsonPropertyName("floatingOpacity")]
+    public double FloatingOpacity { get; set; } = 0.92;
+
+    [JsonPropertyName("floatingVertical")]
+    public bool FloatingVertical { get; set; } = false;
+
+    [JsonPropertyName("autoHideOnFullscreen")]
+    public bool AutoHideOnFullscreen { get; set; } = true;
+
+    [JsonPropertyName("gameOverlayMode")]
+        public string GameOverlayMode { get; set; } = "AutoHide";
+    }
 
 public class ConfigManager : INotifyPropertyChanged, IDisposable
 {

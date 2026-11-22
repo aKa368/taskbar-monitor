@@ -12,13 +12,12 @@ public static class AgentIds
 {
     public const string CommandCode = "commandcode";
     public const string OpenCode = "opencode";
-    public const string Codex = "codex";
     public const string Antigravity = "antigravity";
     public const string Claude = "claude";
 
     /// <summary>All agent ids, in display order.</summary>
     public static readonly IReadOnlyList<string> All =
-        new[] { CommandCode, OpenCode, Codex, Antigravity, Claude };
+        new[] { CommandCode, OpenCode, Antigravity, Claude };
 }
 
 /// <summary>
@@ -54,7 +53,7 @@ public sealed record WindowTotals
 /// <summary>
 /// Immutable snapshot of one agent's usage. <c>null</c> fields mean "not available for this source".
 /// <list type="bullet">
-/// <item>API agents (Codex / Antigravity / Claude) fill <see cref="UsedPercent5h"/> / <see cref="ResetsAt5h"/> / <see cref="UsedPercent7d"/> / <see cref="ResetsAt7d"/>.</item>
+/// <item>API agents (Antigravity / Claude) fill <see cref="UsedPercent5h"/> / <see cref="ResetsAt5h"/> / <see cref="UsedPercent7d"/> / <see cref="ResetsAt7d"/>.</item>
 /// <item>SQLite agents (CommandCode / OpenCode) fill <see cref="Last5h"/> / <see cref="Last7d"/> cost + token totals.</item>
 /// <item><see cref="Error"/> is always a redacted string — secrets never appear in it.</item>
 /// </list>
@@ -84,6 +83,12 @@ public sealed record UsageData
 
     public DateTimeOffset? LastUpdated { get; init; }
 
+    /// <summary>Tổng token tiêu thụ trong tháng hiện tại (Hermes state.db).</summary>
+    public long? TotalTokensMonth { get; init; }
+
+    /// <summary>Tổng số lượt call trong tháng hiện tại (Hermes state.db / fallback API).</summary>
+    public long? TotalCallsMonth { get; init; }
+
     /// <summary>Redacted reason when the last poll failed; null on success.</summary>
     public string? Error { get; init; }
 
@@ -108,7 +113,6 @@ public sealed class UsagePoller : IDisposable, IAsyncDisposable
     private readonly List<Task> _inFlight = new();
     private readonly Lazy<CommandCodeUsage> _commandCode;
     private readonly Lazy<OpenCodeUsage> _opencode;
-    private readonly Lazy<CodexUsage> _codex;
     private readonly Lazy<AntigravityUsage> _antigravity;
     private readonly Lazy<ClaudeCodeUsage> _claude;
     private UsagePollerOptions _options;
@@ -125,14 +129,12 @@ public sealed class UsagePoller : IDisposable, IAsyncDisposable
         UsagePollerOptions? options = null,
         CommandCodeUsage? commandCode = null,
         OpenCodeUsage? openCode = null,
-        CodexUsage? codex = null,
         AntigravityUsage? antigravity = null,
         ClaudeCodeUsage? claude = null)
     {
         _options = options ?? new UsagePollerOptions();
         _commandCode = CreateProvider(commandCode, static () => new CommandCodeUsage());
         _opencode = CreateProvider(openCode, static () => new OpenCodeUsage());
-        _codex = CreateProvider(codex, static () => new CodexUsage());
         _antigravity = CreateProvider(antigravity, static () => new AntigravityUsage());
         _claude = CreateProvider(claude, static () => new ClaudeCodeUsage());
     }
@@ -194,8 +196,7 @@ public sealed class UsagePoller : IDisposable, IAsyncDisposable
                 StartTimersNoLock(options);
                 bool sqliteNewlyEnabled = (!previous.CommandCodeEnabled && options.CommandCodeEnabled)
                     || (!previous.OpenCodeEnabled && options.OpenCodeEnabled);
-                bool apiNewlyEnabled = (!previous.CodexEnabled && options.CodexEnabled)
-                    || (!previous.AntigravityEnabled && options.AntigravityEnabled)
+                bool apiNewlyEnabled = (!previous.AntigravityEnabled && options.AntigravityEnabled)
                     || (!previous.ClaudeEnabled && options.ClaudeEnabled);
                 QueueInitialRefreshesNoLock(options, sqliteNewlyEnabled, apiNewlyEnabled);
             }
@@ -203,7 +204,7 @@ public sealed class UsagePoller : IDisposable, IAsyncDisposable
     }
 
     private static bool HasSqlite(UsagePollerOptions options) => options.CommandCodeEnabled || options.OpenCodeEnabled;
-    private static bool HasApi(UsagePollerOptions options) => options.CodexEnabled || options.AntigravityEnabled || options.ClaudeEnabled;
+    private static bool HasApi(UsagePollerOptions options) => options.AntigravityEnabled || options.ClaudeEnabled;
 
     private void QueueInitialRefreshesNoLock(UsagePollerOptions options, bool sqlite, bool api)
     {
@@ -233,7 +234,7 @@ public sealed class UsagePoller : IDisposable, IAsyncDisposable
         if (options.CommandCodeEnabled || options.OpenCodeEnabled)
             _sqliteTimer = new Timer(static state => ((UsagePoller)state!).OnSqliteTimer(), this,
                 options.SqlitePollInterval, options.SqlitePollInterval);
-        if (options.CodexEnabled || options.AntigravityEnabled || options.ClaudeEnabled)
+        if (options.AntigravityEnabled || options.ClaudeEnabled)
             _apiTimer = new Timer(static state => ((UsagePoller)state!).OnApiTimer(), this,
                 options.ApiPollInterval, options.ApiPollInterval);
     }
@@ -354,9 +355,7 @@ public sealed class UsagePoller : IDisposable, IAsyncDisposable
 
     private async Task PollApiAsync(UsagePollerOptions options, CancellationToken ct)
     {
-        var tasks = new List<Task<UsageData?>>(3);
-        if (options.CodexEnabled)
-            tasks.Add(_codex.Value.FetchAsync(now: null, ct));
+        var tasks = new List<Task<UsageData?>>(2);
         if (options.AntigravityEnabled)
             tasks.Add(_antigravity.Value.FetchAsync(now: null, ct));
         if (options.ClaudeEnabled)
@@ -458,7 +457,6 @@ public sealed class UsagePoller : IDisposable, IAsyncDisposable
         _cts.Dispose();
         if (_commandCode.IsValueCreated) _commandCode.Value.Dispose();
         if (_opencode.IsValueCreated) _opencode.Value.Dispose();
-        if (_codex.IsValueCreated) _codex.Value.Dispose();
         if (_antigravity.IsValueCreated) _antigravity.Value.Dispose();
         if (_claude.IsValueCreated) _claude.Value.Dispose();
     }
@@ -472,7 +470,6 @@ public sealed record UsagePollerOptions
 {
     public bool CommandCodeEnabled { get; init; } = true;
     public bool OpenCodeEnabled { get; init; } = true;
-    public bool CodexEnabled { get; init; } = true;
     public bool AntigravityEnabled { get; init; } = true;
 
     /// <summary>Claude Code is optional — off by default because it needs an OAuth login and the endpoint rate-limits aggressively.</summary>

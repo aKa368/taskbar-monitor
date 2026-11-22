@@ -28,11 +28,12 @@ public sealed class AdaptiveUniformPanel : Panel
         var grid = CalculateGridForChildren(availableSize.Width);
         if (grid.Rows == 0) return default;
         double cellWidth = CellWidth(availableSize.Width, grid.Columns, HorizontalGap);
+        double defaultChildHeight = availableSize.Width < 80 ? 26 : 18;
         double maxChildHeight = 0;
         foreach (UIElement child in InternalChildren)
         {
             child.Measure(new Size(cellWidth, double.PositiveInfinity));
-            maxChildHeight = Math.Max(maxChildHeight, child.DesiredSize.Height);
+            maxChildHeight = Math.Max(maxChildHeight, child.DesiredSize.Height > 0 ? child.DesiredSize.Height : defaultChildHeight);
         }
         double width = double.IsFinite(availableSize.Width)
             ? availableSize.Width
@@ -45,7 +46,8 @@ public sealed class AdaptiveUniformPanel : Panel
         var grid = CalculateGridForChildren(finalSize.Width);
         if (grid.Rows == 0) return finalSize;
         double cellWidth = CellWidth(finalSize.Width, grid.Columns, HorizontalGap);
-        double cellHeight = Math.Max(0, (finalSize.Height - (grid.Rows - 1) * VerticalGap) / grid.Rows);
+        double defaultHeight = finalSize.Width < 80 ? 26 : 18;
+        double cellHeight = Math.Max(defaultHeight, (finalSize.Height - (grid.Rows - 1) * VerticalGap) / grid.Rows);
         var placements = PlanPlacements(InternalChildren.Cast<UIElement>().Select(GetKey).ToArray(), grid.Rows, grid.Columns, PreferredSecondRowKey);
         for (int index = 0; index < InternalChildren.Count; index++)
         {
@@ -58,6 +60,8 @@ public sealed class AdaptiveUniformPanel : Panel
 
     private (int Rows, int Columns) CalculateGridForChildren(double availableWidth)
     {
+        if (double.IsFinite(availableWidth) && availableWidth > 0 && availableWidth < 80)
+            return (InternalChildren.Count, 1);
         var grid = CalculateGrid(InternalChildren.Count, availableWidth, MinimumCellWidth, MaxRows);
         if (InternalChildren.Count >= 2 && PreferredSecondRowKey is { Length: > 0 } key
             && InternalChildren.Cast<UIElement>().Any(child => string.Equals(GetKey(child), key, StringComparison.OrdinalIgnoreCase)))
@@ -68,6 +72,11 @@ public sealed class AdaptiveUniformPanel : Panel
     internal static IReadOnlyList<(int Row, int Column)> PlanPlacements(IReadOnlyList<string?> keys, int rows, int columns, string? preferredSecondRowKey)
     {
         var result = new (int Row, int Column)[keys.Count];
+        if (columns <= 1)
+        {
+            for (int i = 0; i < keys.Count; i++) result[i] = (i, 0);
+            return result;
+        }
         var free = new List<(int Row, int Column)>();
         for (int column = 0; column < columns; column++)
             for (int row = 0; row < rows; row++) free.Add((row, column));
@@ -100,6 +109,8 @@ public sealed class AdaptiveUniformPanel : Panel
     internal static (int Rows, int Columns) CalculateGrid(int itemCount, double availableWidth, double minimumCellWidth, int maxRows)
     {
         if (itemCount <= 0) return (0, 0);
+        if (double.IsFinite(availableWidth) && availableWidth > 0 && availableWidth < 80)
+            return (itemCount, 1);
         int safeMaxRows = Math.Max(1, maxRows);
         int columnsThatFit = double.IsFinite(availableWidth) && availableWidth > 0
             ? Math.Max(1, (int)Math.Floor(availableWidth / Math.Max(1, minimumCellWidth)))

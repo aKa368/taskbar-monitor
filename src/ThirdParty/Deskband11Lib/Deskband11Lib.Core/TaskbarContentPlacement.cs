@@ -6,6 +6,7 @@ public enum TaskbarContentPlacement
     LeftEdge,
     BeforeNotificationArea,
     BeforeStartButton,
+    AfterTaskbarButtons,
     /// <summary>
     /// A dedicated account-status area. It occupies the far-left safe gap on a
     /// centered taskbar and the first safe slot after the taskbar button group

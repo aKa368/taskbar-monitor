@@ -92,35 +92,118 @@ public class LayoutManagerTests
     [Fact]
     public void LayoutManager_Grid_UsesRequestedMetricAndAgentOrder()
     {
-        var cfg = MakeConfig(WidgetLayoutKind.Grid);
-        cfg.Metrics.Gpu = true;
-        cfg.Metrics.Temperature = true;
-        cfg.Agents.Codex = true;
-        cfg.Agents.CommandCode = true;
+        try
+        {
+            TaskbarMonitor.Metrics.HardwareTopology.ForceDiscreteGpu = true;
+            var cfg = MakeConfig(WidgetLayoutKind.Grid);
+            cfg.Metrics.Gpu = true;
+            cfg.Metrics.Temperature = true;
+            cfg.Agents.CommandCode = true;
 
-        var manager = new LayoutManager();
-        manager.Apply(WidgetLayoutKind.Grid, cfg);
+            var manager = new LayoutManager();
+            manager.Apply(WidgetLayoutKind.Grid, cfg);
 
-        Assert.Equal(new[] { "cpu", "ram", "gpu", "network" },
-            manager.Rows[0].OfType<MetricPodViewModel>().Select(p => p.Key));
-        Assert.Equal(new[] { "Codex", "OpenCode", "CommandCode" },
-            manager.Rows[1].OfType<AgentPodViewModel>().Select(p => p.Key));
-        Assert.Equal("GPT", manager.Rows[1].OfType<AgentPodViewModel>()
-            .Single(p => p.Key == "Codex").Label);
+            Assert.Equal(new[] { "cpu", "ram", "gpu", "network" },
+                manager.Rows[0].OfType<MetricPodViewModel>().Select(p => p.Key));
+            Assert.Equal(new[] { "OpenCode", "CommandCode" },
+                manager.Rows[1].OfType<AgentPodViewModel>().Select(p => p.Key));
+        }
+        finally
+        {
+            TaskbarMonitor.Metrics.HardwareTopology.ForceDiscreteGpu = null;
+        }
     }
 
     [Fact]
     public void LayoutManager_Grid_PutsNetworkLastWhenOptionalDiskIsEnabled()
     {
-        var cfg = MakeConfig(WidgetLayoutKind.Grid);
-        cfg.Metrics.Gpu = true;
-        cfg.Metrics.Disk = true;
+        try
+        {
+            TaskbarMonitor.Metrics.HardwareTopology.ForceDiscreteGpu = true;
+            var cfg = MakeConfig(WidgetLayoutKind.Grid);
+            cfg.Metrics.Gpu = true;
+            cfg.Metrics.Disk = true;
 
-        var manager = new LayoutManager();
-        manager.Apply(WidgetLayoutKind.Grid, cfg);
+            var manager = new LayoutManager();
+            manager.Apply(WidgetLayoutKind.Grid, cfg);
 
-        Assert.Equal(new[] { "cpu", "ram", "gpu", "disk", "network" },
-            manager.Rows[0].OfType<MetricPodViewModel>().Select(p => p.Key));
+            Assert.Equal(new[] { "cpu", "ram", "gpu", "disk", "network" },
+                manager.Rows[0].OfType<MetricPodViewModel>().Select(p => p.Key));
+        }
+        finally
+        {
+            TaskbarMonitor.Metrics.HardwareTopology.ForceDiscreteGpu = null;
+        }
     }
 
+    [Fact]
+    public void LayoutManager_SharedApu_MergesCpuAndGpuPod()
+    {
+        try
+        {
+            TaskbarMonitor.Metrics.HardwareTopology.ForceDiscreteGpu = false;
+            var cfg = MakeConfig(WidgetLayoutKind.Compact);
+            cfg.Metrics.Cpu = true;
+            cfg.Metrics.Gpu = true;
+            cfg.Metrics.Ram = true;
+            cfg.Metrics.Network = true;
+
+            var manager = new LayoutManager();
+            manager.Apply(WidgetLayoutKind.Compact, cfg);
+
+            var keys = manager.Pods.OfType<MetricPodViewModel>().Select(p => p.Key).ToList();
+            Assert.Contains("cpu_gpu", keys);
+            Assert.DoesNotContain("cpu", keys);
+            Assert.DoesNotContain("gpu", keys);
+            Assert.Contains("ram", keys);
+        }
+        finally
+        {
+            TaskbarMonitor.Metrics.HardwareTopology.ForceDiscreteGpu = null;
+        }
+    }
+
+    [Fact]
+    public void LayoutManager_GameOverlay_AddsFpsAndPingPods()
+    {
+        var cfg = MakeConfig(WidgetLayoutKind.Compact);
+        cfg.Metrics.GameOverlay = true;
+
+        var manager = new LayoutManager();
+        manager.Apply(WidgetLayoutKind.Compact, cfg);
+
+        var keys = manager.Pods.OfType<MetricPodViewModel>().Select(p => p.Key).ToList();
+        Assert.Contains("fps", keys);
+        Assert.Contains("ping", keys);
+    }
+
+    [Fact]
+    public void AgentPodViewModel_StatusProperties_DefaultAndChange()
+    {
+        var pod = new AgentPodViewModel("Antigravity", "AGY");
+        Assert.False(pod.IsOnline);
+        Assert.Equal("#A0B0C4", pod.StatusColor);
+        Assert.Same(AgentPodViewModel.DefaultLabelBrush, pod.StatusBrush);
+        Assert.Equal("", pod.HorizontalValueText);
+
+        pod.ValueText = "1.8B tok · 10.5K call";
+        Assert.Equal("1.8B tok · 10.5K call", pod.HorizontalValueText);
+
+        pod.HorizontalValueText = "1.8B · 10.5K";
+        Assert.Equal("1.8B · 10.5K", pod.HorizontalValueText);
+
+        pod.IsOnline = true;
+        pod.StatusBrush = AgentPodViewModel.OnlineStatusBrush;
+        pod.StatusColor = "#4ADE80";
+        Assert.True(pod.IsOnline);
+        Assert.Equal("#4ADE80", pod.StatusColor);
+        Assert.Same(AgentPodViewModel.OnlineStatusBrush, pod.StatusBrush);
+
+        pod.IsOnline = false;
+        pod.StatusBrush = AgentPodViewModel.OfflineStatusBrush;
+        pod.StatusColor = "#EF4444";
+        Assert.False(pod.IsOnline);
+        Assert.Equal("#EF4444", pod.StatusColor);
+        Assert.Same(AgentPodViewModel.OfflineStatusBrush, pod.StatusBrush);
+    }
 }

@@ -46,3 +46,13 @@ RESEARCH.md
 # OS files
 Thumbs.db
 Desktop.ini
+
+# Local machine-only project notes & deploy helpers (contain personal infra/paths).
+# Never publish: keep these on this workstation only.
+PROJECT.md
+/*.png
+deploy_and_verify.py
+restart_monitor.bat
+capture_widget.py
+measure_probe.py
+build_release.bat

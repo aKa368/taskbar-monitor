@@ -112,6 +112,22 @@ public sealed class MetricsCoreTests
     }
 
     [Fact]
+    public void SharedSamplerCanRestartAfterStop()
+    {
+        using var sampler = new MetricSampler(
+            new Dictionary<string, Func<double>> { ["cpu"] = () => 42 },
+            useSharedClock: true);
+
+        Assert.False(sampler.IsRunning);
+        sampler.Start();
+        Assert.True(sampler.IsRunning);
+        sampler.Stop();
+        Assert.False(sampler.IsRunning);
+        sampler.Start();
+        Assert.True(sampler.IsRunning);
+    }
+
+    [Fact]
     public async Task SamplerSkipsOverlappingSamplePasses()
     {
         var entered = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -342,6 +358,29 @@ public sealed class MetricsCoreTests
         var reading = monitor.Sample();
         Assert.True(double.IsNaN(reading.Celsius));
         Assert.Contains("no standard DIMM", reading.Reason);
+    }
+
+    [Fact]
+    public void GamePerformanceMonitor_OverridableForTests()
+    {
+        try
+        {
+            GamePerformanceMonitor.ForceGameRunning = true;
+            GamePerformanceMonitor.ForceFps = 144;
+            GamePerformanceMonitor.ForcePingMs = 28;
+
+            var monitor = GamePerformanceMonitor.Instance;
+            // Let the timer/poll run or verify properties
+            Assert.True(GamePerformanceMonitor.ForceGameRunning);
+            Assert.Equal(144, GamePerformanceMonitor.ForceFps);
+            Assert.Equal(28, GamePerformanceMonitor.ForcePingMs);
+        }
+        finally
+        {
+            GamePerformanceMonitor.ForceGameRunning = null;
+            GamePerformanceMonitor.ForceFps = null;
+            GamePerformanceMonitor.ForcePingMs = null;
+        }
     }
 
     private sealed class FakeWddmNative(params uint[] values) : IWddmTemperatureNative

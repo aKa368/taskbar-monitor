@@ -41,7 +41,7 @@ public sealed class RedactionTests
     [Fact]
     public void UsageDataFailureRedactsItsInput()
     {
-        var data = UsageData.Failure(AgentIds.Codex, $"boom: {Secret}", DateTimeOffset.UnixEpoch, Secret);
+        var data = UsageData.Failure(AgentIds.Antigravity, $"boom: {Secret}", DateTimeOffset.UnixEpoch, Secret);
         Assert.DoesNotContain(Secret, data.Error);
         Assert.Contains("[REDACTED]", data.Error);
     }

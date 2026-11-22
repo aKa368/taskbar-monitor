@@ -60,7 +60,6 @@ public class ConfigManagerTests : IDisposable
         Assert.False(manager.Config.Metrics.Gpu);
         Assert.True(manager.Config.Agents.CommandCode);
         Assert.True(manager.Config.Agents.OpenCode);
-        Assert.False(manager.Config.Agents.Codex);
         Assert.Equal("Auto", manager.Config.Placement);
         Assert.Equal(360, manager.Config.PreferredWidth);
         Assert.False(manager.Config.Autostart);
@@ -90,7 +89,6 @@ public class ConfigManagerTests : IDisposable
             {
                 CommandCode = true,
                 OpenCode = true,
-                Codex = true,
                 Antigravity = true,
                 Claude = true
             },
@@ -101,7 +99,6 @@ public class ConfigManagerTests : IDisposable
                 Network = "#0000FF",
                 CommandCode = "#FFFF00",
                 OpenCode = "#00FFFF",
-                Codex = "#FF00FF",
                 Antigravity = "#FFFFFF",
                 Claude = "#000000"
             }
@@ -207,7 +204,6 @@ public class ConfigManagerTests : IDisposable
         Assert.Equal("Sarasa Fixed SC", manager.Config.FontFamily);
         Assert.Equal(1.2, manager.Config.FontScale);
         Assert.False(manager.Config.ShowLabels);
-
     }
 
     [Fact]

@@ -19,15 +19,15 @@ public static class LayoutDefinition
     public static LayoutInfo Get(WidgetLayoutKind kind) => kind switch
     {
         WidgetLayoutKind.Compact => new LayoutInfo(
-            "Compact", "Pods ngang: metrics + agent usage, chỉ text", true, true, true, false, true, 32),
+            "Compact", "Pods ngang: metrics + agent usage, chỉ text", true, true, false, false, true, 32),
         WidgetLayoutKind.Minimal => new LayoutInfo(
             "Minimal", "Chỉ text, không border/chart — nhẹ nhất", true, true, false, false, false, 28),
         WidgetLayoutKind.TwoLine => new LayoutInfo(
-            "TwoLine", "2 hàng gọn: metrics trên, agents dưới", true, true, true, true, false, 40),
+            "TwoLine", "2 hàng gọn: metrics trên, agents dưới", true, true, false, true, false, 40),
         WidgetLayoutKind.AgentCentric => new LayoutInfo(
-            "AgentCentric", "Chỉ agent usage text", false, true, true, false, true, 32),
+            "AgentCentric", "Chỉ agent usage text", false, true, false, false, true, 32),
         WidgetLayoutKind.Grid => new LayoutInfo(
-            "Grid", "Metrics ghép cặp + usage agents, chỉ text", true, true, true, true, false, 40),
+            "Grid", "Metrics ghép cặp + usage agents, chỉ text", true, true, false, true, false, 40),
         _ => throw new ArgumentOutOfRangeException(nameof(kind))
     };
 }

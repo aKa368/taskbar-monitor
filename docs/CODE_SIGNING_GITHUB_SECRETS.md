@@ -1,5 +1,7 @@
 # GitHub Secrets cho code signing Taskbar Monitor
 
+> **Current workflow:** release signing now uses Microsoft Artifact Signing through Azure OIDC. The PFX instructions below are retained as a fallback/reference path and are not used by the current `.github/workflows/build-and-test.yml`.
+
 ## Tổng quan
 
 Workflow `.github/workflows/build-and-test.yml` hiện giữ hai luồng riêng. Push vào `main` và pull request chỉ build/test; bước ký số chỉ chạy khi push một tag phát hành có dạng `vMAJOR.MINOR.PATCH`, ví dụ `v1.0.2`. Điều này ngăn mã nguồn từ pull request không đáng tin cậy tiếp cận private key.
@@ -8,11 +10,28 @@ Release job thực hiện restore, đối chiếu tag với `<Version>` trong `s
 
 > **Không chạy signing từ pull request.** Không dùng secret trong job build/test thông thường. Không upload PFX, password hoặc file chứa private key như artifact.
 
-## 1. Chuẩn bị certificate
+## 1. Cấu hình Microsoft Artifact Signing (đường dẫn hiện tại)
+
+Tạo Artifact Signing account, hoàn tất identity validation, tạo certificate profile và gán role **Artifact Signing Certificate Profile Signer** cho Azure identity được GitHub Actions sử dụng. Tạo federated credential giới hạn theo repository, environment `release-signing` và tag release. Workflow dùng OIDC nên không cần đưa private key hoặc PFX vào GitHub Secrets.
+
+Trong Environment `release-signing`, cấu hình các Secrets:
+
+| Secret | Mục đích |
+|---|---|
+| `AZURE_CLIENT_ID` | Client ID của Azure application/federated identity |
+| `AZURE_TENANT_ID` | Azure tenant ID |
+| `AZURE_SUBSCRIPTION_ID` | Azure subscription ID |
+| `ARTIFACT_SIGNING_ENDPOINT` | Endpoint theo region của Artifact Signing account |
+| `ARTIFACT_SIGNING_ACCOUNT_NAME` | Tên Artifact Signing account |
+| `ARTIFACT_SIGNING_CERTIFICATE_PROFILE_NAME` | Tên certificate profile |
+
+Workflow cấp `id-token: write` riêng cho job release, đăng nhập bằng `azure/login@v3`, ký bằng `azure/artifact-signing-action@v2`, rồi verify chữ ký và tạo hash. Không cần tạo `CODESIGN_PFX_BASE64` hoặc `CODESIGN_PFX_PASSWORD` cho đường dẫn này.
+
+## 2. Chuẩn bị PFX cho fallback
 
 Sử dụng certificate Authenticode Code Signing công khai từ CA uy tín, Microsoft Artifact Signing, certificate store hoặc hardware token. Không dùng certificate tự ký cho phát hành công khai.
 
-Phiên bản workflow hiện tại dùng PFX vì GitHub-hosted Windows runner là máy ephemeral. PFX chỉ tồn tại tạm thời trong `$env:RUNNER_TEMP`; workflow xóa file này trong bước `if: always()` sau khi ký hoặc khi pipeline thất bại.
+Nếu dùng PFX làm fallback, PFX chỉ nên tồn tại tạm thời trong `$env:RUNNER_TEMP`; signing workflow phải xóa file này trong bước `if: always()` sau khi ký hoặc khi pipeline thất bại. Workflow hiện tại dùng Artifact Signing và không giải mã PFX.
 
 Nếu nhà cung cấp cấp certificate dưới dạng `.pfx`, cần có:
 
@@ -24,7 +43,7 @@ Nếu nhà cung cấp cấp certificate dưới dạng `.pfx`, cần có:
 | Certificate thumbprint | Pin đúng certificate, tránh ký nhầm bằng certificate khác |
 | RFC 3161 timestamp URL | Giúp chữ ký tiếp tục xác minh sau khi certificate hết hạn |
 
-## 2. Tạo Base64 secret cho PFX trên Windows
+## 3. Tạo Base64 secret cho PFX trên Windows
 
 Thực hiện trên máy quản lý certificate, không thực hiện trên runner công khai và không commit file PFX vào Git. PowerShell dưới đây chỉ đưa chuỗi Base64 vào clipboard; hãy dán ngay vào GitHub Secret rồi xóa clipboard.
 
@@ -42,7 +61,7 @@ Get-PfxCertificate -FilePath 'C:\Secure\TaskbarMonitor-CodeSigning.pfx' |
 
 Để tránh sai thumbprint, xóa khoảng trắng khi lưu secret. Không lưu private key hoặc password vào `appsettings`, `.env`, workflow YAML hoặc issue/comment.
 
-## 3. Tạo GitHub Environment bảo vệ release signing
+## 4. Tạo GitHub Environment bảo vệ release signing
 
 Trong repository, mở **Settings → Environments → New environment** và tạo environment có tên `release-signing`. Nên bật required reviewers và giới hạn deployment branch/tag cho các tag phát hành `v*` nếu chính sách repository hỗ trợ.
 
@@ -58,7 +77,7 @@ Trong **Settings → Secrets and variables → Actions → Environments → rele
 
 Nếu dùng GitHub Organization, có thể lưu các secret dùng chung ở Organization level nhưng phải giới hạn repository được phép truy cập. Không dùng `Repository secrets` rộng rãi nếu chỉ một environment phát hành cần quyền ký.
 
-## 4. Liên kết job với environment
+## 5. Liên kết job với environment
 
 Để required reviewers của environment thực sự bảo vệ secret, thêm `environment: release-signing` vào job `release` trong `.github/workflows/build-and-test.yml`:
 
@@ -73,7 +92,7 @@ Nếu dùng GitHub Organization, có thể lưu các secret dùng chung ở Orga
 
 Nếu repository không muốn approval thủ công, vẫn nên giữ environment để secrets không xuất hiện trong job thông thường. Khi bật approval, tag workflow sẽ chờ reviewer xác nhận trước khi runner nhận được secrets.
 
-## 5. Kiểm tra cấu hình trước khi phát hành
+## 6. Kiểm tra cấu hình trước khi phát hành
 
 Đảm bảo `<Version>` trong `src/TaskbarMonitor.csproj` bằng version của tag. Ví dụ:
 
@@ -102,7 +121,7 @@ Workflow sẽ dừng trước signing nếu tag không khớp project version. K
 7. Publisher và thumbprint khớp secret kỳ vọng nếu đã cấu hình.
 8. Artifact upload chỉ chứa installer, file `.sha256` và `signing-summary.json`.
 
-## 6. Quy tắc bảo vệ secret
+## 7. Quy tắc bảo vệ secret
 
 Không echo các biến `CODESIGN_*` vào log. Không sử dụng `Write-Host $env:CODESIGN_PFX_PASSWORD`, không in command line đã expand, không tạo debug dump của environment và không đưa PFX vào cache. GitHub masking giảm nguy cơ lộ secret trong log nhưng không thay thế cho việc tránh đưa secret vào output.
 
@@ -110,7 +129,7 @@ Nếu workflow thất bại, tải log để kiểm tra lỗi nhưng không tả
 
 Không sửa installer sau bước signing. Nếu thay đổi file, phải compile lại hoặc ký lại, rồi verify và tạo hash mới.
 
-## 7. Phương án không dùng PFX
+## 8. Phương án không dùng PFX
 
 Certificate store, hardware token hoặc managed signing service là lựa chọn tốt hơn khi tổ chức có hạ tầng tương ứng. Khi đó, thay bước decode PFX bằng bước setup của nhà cung cấp và gọi helper với:
 
@@ -125,7 +144,7 @@ pwsh -NoProfile -File .\jobs\Sign-Release.ps1 `
 
 Không cấu hình đồng thời PFX và thumbprint. Helper sẽ từ chối khi có cả hai hoặc không có nguồn certificate nào.
 
-## 8. SmartScreen
+## 9. SmartScreen
 
 Ký số làm Windows hiển thị publisher đã xác minh và bảo vệ tính toàn vẹn file, nhưng không bảo đảm cảnh báo SmartScreen biến mất ngay với file mới. SmartScreen còn dùng file-hash reputation và publisher reputation; reputation cần tích lũy từ các lượt tải sạch. Vì vậy mỗi release phải dùng certificate nhất quán, phân phối installer từ kênh chính thức và công bố SHA-256.
 

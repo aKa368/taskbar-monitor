@@ -1,4 +1,4 @@
-﻿{
+{
   "metrics": {
     "cpu": true,
     "ram": true,
@@ -11,7 +11,6 @@
   "agents": {
     "commandcode": true,
     "opencode": true,
-    "codex": false,
     "antigravity": false,
     "claude": false
   },
@@ -21,7 +20,6 @@
     "network": "#17A2B8",
     "commandcode": "#6F42C1",
     "opencode": "#FD7E14",
-    "codex": "#10A37F",
     "antigravity": "#4285F4",
     "claude": "#D97706"
   },

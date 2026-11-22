@@ -110,7 +110,7 @@ public sealed class SettingsPaletteViewModel : INotifyPropertyChanged
         }
 
         // Metrics
-        AddToggle(list, "toggle-metric-cpu", "Metric: CPU", "Bật/tắt pod CPU", SettingsCommandKind.ToggleMetric,
+        AddToggle(list, "toggle-metric-cpu", "Metric: CPU & GPU (APU)", "Bật/tắt pod CPU và GPU", SettingsCommandKind.ToggleMetric,
             () => _config.Metrics.Cpu, v => _config.Metrics.Cpu = v);
         AddToggle(list, "toggle-metric-ram", "Metric: RAM", "Bật/tắt pod RAM", SettingsCommandKind.ToggleMetric,
             () => _config.Metrics.Ram, v => _config.Metrics.Ram = v);
@@ -126,17 +126,14 @@ public sealed class SettingsPaletteViewModel : INotifyPropertyChanged
             () => _config.Metrics.RamTemperature, v => _config.Metrics.RamTemperature = v);
 
         // Agents
-        AddToggle(list, "toggle-agent-commandcode", "Agent: CommandCode", "Bật/tắt pod CommandCode", SettingsCommandKind.ToggleAgent,
-            () => _config.Agents.CommandCode, v => _config.Agents.CommandCode = v);
         AddToggle(list, "toggle-agent-opencode", "Agent: OpenCode", "Bật/tắt pod OpenCode", SettingsCommandKind.ToggleAgent,
-            () => _config.Agents.OpenCode, v => _config.Agents.OpenCode = v);
-        // The legacy config key is kept for backward compatibility; displayed quota is ChatGPT's.
-        AddToggle(list, "toggle-agent-codex", "Agent: ChatGPT Usage", "Bật/tắt quota ChatGPT (5 giờ / 7 ngày)", SettingsCommandKind.ToggleAgent,
-            () => _config.Agents.Codex, v => _config.Agents.Codex = v);
-        AddToggle(list, "toggle-agent-antigravity", "Agent: Antigravity", "Bật/tắt pod Antigravity", SettingsCommandKind.ToggleAgent,
-            () => _config.Agents.Antigravity, v => _config.Agents.Antigravity = v);
-        AddToggle(list, "toggle-agent-claude", "Agent: Claude", "Bật/tắt pod Claude", SettingsCommandKind.ToggleAgent,
-            () => _config.Agents.Claude, v => _config.Agents.Claude = v);
+                    () => _config.Agents.OpenCode, v => _config.Agents.OpenCode = v);
+                AddToggle(list, "toggle-agent-commandcode", "Agent: CommandCode", "Bật/tắt pod CommandCode", SettingsCommandKind.ToggleAgent,
+                    () => _config.Agents.CommandCode, v => _config.Agents.CommandCode = v);
+                AddToggle(list, "toggle-agent-antigravity", "Agent: Antigravity", "Bật/tắt pod Antigravity", SettingsCommandKind.ToggleAgent,
+                    () => _config.Agents.Antigravity, v => _config.Agents.Antigravity = v);
+                AddToggle(list, "toggle-agent-claude", "Agent: Claude", "Bật/tắt pod Claude", SettingsCommandKind.ToggleAgent,
+                    () => _config.Agents.Claude, v => _config.Agents.Claude = v);
 
         // Interval
         foreach (var interval in new[] { 1, 2, 5 })
