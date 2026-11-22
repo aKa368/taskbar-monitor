@@ -33,6 +33,10 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
     private string _gpuTemperatureSource = "GPU driver exposes no temperature telemetry";
     private string? _metricSignature;
     private UsagePoller? _poller;
+    // ponytail: cached formatted agent text — recompute only when the data object
+    // or showReset flag actually changes (agent pollers run 5-30s, UI tick is 1s).
+    // Upgrade path: none needed; bounded by the number of agent pods.
+    private readonly Dictionary<string, (UsageData? Data, bool ShowReset, string Full, string Compact, string Line2, string ToolTip)> _agentTextCache = new();
     private string? _usageInitializationError;
     private string _fontFamily = TaskbarFontResolver.SafeFallback;
     private string _networkRateText = "UP -- DOWN --";
@@ -690,36 +694,63 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
         {
             var data = _poller?.Get(ToAgentId(pod.Key));
 
+            // ponytail: skip re-formatting when the poller hasn't produced new data.
+            // SetField guards in PodViewModel make the assignments below no-ops.
+            if (_agentTextCache.TryGetValue(pod.Key, out var cached)
+                && ReferenceEquals(cached.Data, data) && cached.ShowReset == showReset)
+            {
+                pod.ValueText = cached.Compact;
+                pod.Line1 = pod.Label;
+                pod.Line2 = cached.Line2;
+                pod.ToolTipText = cached.ToolTip;
+                pod.HasLine2 = true;
+                AssignAgentBars(pod, data);
+                continue;
+            }
+
             double? pct5h = data?.UsedPercent5h;
             double? pct7d = data?.UsedPercent7d;
             DateTime? reset5h = data?.ResetsAt5h?.LocalDateTime;
             DateTime? reset7d = data?.ResetsAt7d?.LocalDateTime;
 
             string fullValue = UsageTextFormatter.FormatAgentDisplay(data, showReset);
-            pod.ValueText = UsageTextFormatter.FormatCompactAgentDisplay(data);
-            pod.Line1 = pod.Label;
-            pod.Line2 = pct5h.HasValue ? $"{pct5h.Value:F0}%" : pod.ValueText;
-            pod.HasLine2 = true;
-            pod.ToolTipText = data?.Error is { Length: > 0 } error
+            string compact = UsageTextFormatter.FormatCompactAgentDisplay(data);
+            string line2 = pct5h.HasValue ? $"{pct5h.Value:F0}%" : compact;
+            string toolTip = data?.Error is { Length: > 0 } error
                 ? $"{fullValue}\nLast update failed: {error}"
                 : data?.LastUpdated is { } updated
                     ? $"{fullValue}\nUpdated {updated.LocalDateTime:g}"
                     : "Waiting for the first usage update";
 
-            if (data?.Source != "api")
-            {
-                pod.FiveHourPercentage = pct5h ?? double.NaN;
-                pod.SevenDayPercentage = pct7d ?? double.NaN;
-                pod.FiveHourResetText = UsageTextFormatter.FormatResetTime(reset5h);
-                pod.SevenDayResetText = UsageTextFormatter.FormatResetTime(reset7d);
-                pod.Line3 = pod.FiveHourResetText;
-            }
-            else
-            {
-                pod.FiveHourPercentage = double.NaN;
-                pod.SevenDayPercentage = double.NaN;
-                pod.Line3 = string.Empty;
-            }
+            _agentTextCache[pod.Key] = (data, showReset, fullValue, compact, line2, toolTip);
+            pod.ValueText = compact;
+            pod.Line1 = pod.Label;
+            pod.Line2 = line2;
+            pod.ToolTipText = toolTip;
+            pod.HasLine2 = true;
+            AssignAgentBars(pod, data);
+        }
+    }
+
+    private static void AssignAgentBars(AgentPodViewModel pod, UsageData? data)
+    {
+        double? pct5h = data?.UsedPercent5h;
+        double? pct7d = data?.UsedPercent7d;
+        DateTime? reset5h = data?.ResetsAt5h?.LocalDateTime;
+        DateTime? reset7d = data?.ResetsAt7d?.LocalDateTime;
+        if (data?.Source != "api")
+        {
+            pod.FiveHourPercentage = pct5h ?? double.NaN;
+            pod.SevenDayPercentage = pct7d ?? double.NaN;
+            pod.FiveHourResetText = UsageTextFormatter.FormatResetTime(reset5h);
+            pod.SevenDayResetText = UsageTextFormatter.FormatResetTime(reset7d);
+            pod.Line3 = pod.FiveHourResetText;
+        }
+        else
+        {
+            pod.FiveHourPercentage = double.NaN;
+            pod.SevenDayPercentage = double.NaN;
+            pod.Line3 = string.Empty;
         }
     }
 
