@@ -32,7 +32,7 @@ jobs:
             **/packages.lock.json
 
       - name: Restore
-        run: dotnet restore TaskbarMonitor.sln --locked-mode
+        run: dotnet restore TaskbarMonitor.sln 
 
       - name: Build
         run: dotnet build TaskbarMonitor.sln --configuration Release --no-restore --warnaserror
@@ -94,7 +94,7 @@ jobs:
             **/packages.lock.json
 
       - name: Restore
-        run: dotnet restore TaskbarMonitor.sln --locked-mode
+        run: dotnet restore TaskbarMonitor.sln 
 
       - name: Resolve and validate release version
         id: version
