@@ -203,14 +203,14 @@ public static class TaskbarContextMenu
     }
 
     private static MenuItem BuildAgentsMenu()
-        {
-            var item = new MenuItem { Header = "Trợ lý AI (Agents)" };
-            AddAgentToggle(item, "OpenCode", c => c.Agents.OpenCode);
-            AddAgentToggle(item, "CommandCode", c => c.Agents.CommandCode);
-            AddAgentToggle(item, "Antigravity", c => c.Agents.Antigravity);
-            AddAgentToggle(item, "Claude", c => c.Agents.Claude);
-            return item;
-        }
+    {
+        var item = new MenuItem { Header = "Trợ lý AI (Agents)" };
+        AddAgentToggle(item, "OpenCode", c => c.Agents.OpenCode);
+        AddAgentToggle(item, "CommandCode", c => c.Agents.CommandCode);
+        AddAgentToggle(item, "Antigravity", c => c.Agents.Antigravity);
+        AddAgentToggle(item, "Claude", c => c.Agents.Claude);
+        return item;
+    }
 
     private static MenuItem BuildTaskbarPositionMenu()
     {
@@ -383,12 +383,12 @@ public static class TaskbarContextMenu
     }
 
     private static void SetAgent(ConfigData cfg, string label, bool value)
-        {
-            if (label.Contains("OpenCode")) cfg.Agents.OpenCode = value;
-            else if (label.Contains("CommandCode")) cfg.Agents.CommandCode = value;
-            else if (label.Contains("Antigravity")) cfg.Agents.Antigravity = value;
-            else if (label.Contains("Claude")) cfg.Agents.Claude = value;
-        }
+    {
+        if (label.Contains("OpenCode")) cfg.Agents.OpenCode = value;
+        else if (label.Contains("CommandCode")) cfg.Agents.CommandCode = value;
+        else if (label.Contains("Antigravity")) cfg.Agents.Antigravity = value;
+        else if (label.Contains("Claude")) cfg.Agents.Claude = value;
+    }
 
     public static void ShowSettingsPalette()
     {

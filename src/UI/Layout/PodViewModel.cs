@@ -124,19 +124,19 @@ public abstract class PodViewModel : INotifyPropertyChanged
 
     /// <summary>Khóa độ rộng tối thiểu cho từng pod để tránh giật giao diện khi giá trị thay đổi.</summary>
     public double MinWidth => Key switch
-        {
-            "cpu_gpu_ram" => 140,
-            "cpu_gpu" => 108,
-            "ram" => 36,
-            "network" => 110,
-            "cpu" => 55,
-            "gpu" => 55,
-            "fps" => 60,
-            "ping" => 60,
-            "disk" => 55,
-            "clock" => 50,
-            _ => 0
-        };
+    {
+        "cpu_gpu_ram" => 140,
+        "cpu_gpu" => 108,
+        "ram" => 36,
+        "network" => 110,
+        "cpu" => 55,
+        "gpu" => 55,
+        "fps" => 60,
+        "ping" => 60,
+        "disk" => 55,
+        "clock" => 50,
+        _ => 0
+    };
 
     public bool IsVisible
     {

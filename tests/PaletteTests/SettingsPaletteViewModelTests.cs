@@ -18,17 +18,17 @@ public class SettingsPaletteViewModelTests
     }
 
     [Fact]
-        public void Builds_Commands_For_All_Groups()
-        {
-            var (vm, _, _) = MakeVm();
-            Assert.Contains(vm.Commands, c => c.Id == "toggle-metric-cpu");
-            Assert.DoesNotContain(vm.Commands, c => c.Id == "toggle-metric-power");
-            Assert.Contains(vm.Commands, c => c.Id == "toggle-metric-clock");
-            Assert.Contains(vm.Commands, c => c.Id == "toggle-agent-opencode" && c.Label == "Agent: OpenCode");
-            Assert.Contains(vm.Commands, c => c.Id == "choose-layout-TwoLine");
-            Assert.Contains(vm.Commands, c => c.Id == "set-interval-1");
-            Assert.Contains(vm.Commands, c => c.Id == "set-autostart");
-        }
+    public void Builds_Commands_For_All_Groups()
+    {
+        var (vm, _, _) = MakeVm();
+        Assert.Contains(vm.Commands, c => c.Id == "toggle-metric-cpu");
+        Assert.DoesNotContain(vm.Commands, c => c.Id == "toggle-metric-power");
+        Assert.Contains(vm.Commands, c => c.Id == "toggle-metric-clock");
+        Assert.Contains(vm.Commands, c => c.Id == "toggle-agent-opencode" && c.Label == "Agent: OpenCode");
+        Assert.Contains(vm.Commands, c => c.Id == "choose-layout-TwoLine");
+        Assert.Contains(vm.Commands, c => c.Id == "set-interval-1");
+        Assert.Contains(vm.Commands, c => c.Id == "set-autostart");
+    }
 
     [Fact]
     public void Builds_Theme_Commands_For_All_Presets()
@@ -127,29 +127,29 @@ public class SettingsPaletteViewModelTests
     }
 
     [Fact]
-        public void Toggle_Metric_Flips_Config_And_Saves()
-        {
-            var (vm, cfg, saved) = MakeVm();
-            Assert.True(cfg.Metrics.Cpu);
-            var cmd = vm.Commands.First(c => c.Id == "toggle-metric-cpu");
-            cmd.Execute();
-            Assert.False(cfg.Metrics.Cpu);
-            Assert.Single(saved); // save callback được gọi
-        }
+    public void Toggle_Metric_Flips_Config_And_Saves()
+    {
+        var (vm, cfg, saved) = MakeVm();
+        Assert.True(cfg.Metrics.Cpu);
+        var cmd = vm.Commands.First(c => c.Id == "toggle-metric-cpu");
+        cmd.Execute();
+        Assert.False(cfg.Metrics.Cpu);
+        Assert.Single(saved); // save callback được gọi
+    }
 
-        [Fact]
-        public void Toggle_Clock_Metric_Flips_Config_And_Saves()
-        {
-            var (vm, cfg, saved) = MakeVm();
-            Assert.False(cfg.Metrics.Clock); // default off
-            var cmd = vm.Commands.First(c => c.Id == "toggle-metric-clock");
-            cmd.Execute();
-            Assert.True(cfg.Metrics.Clock);
-            Assert.Single(saved);
-        }
+    [Fact]
+    public void Toggle_Clock_Metric_Flips_Config_And_Saves()
+    {
+        var (vm, cfg, saved) = MakeVm();
+        Assert.False(cfg.Metrics.Clock); // default off
+        var cmd = vm.Commands.First(c => c.Id == "toggle-metric-clock");
+        cmd.Execute();
+        Assert.True(cfg.Metrics.Clock);
+        Assert.Single(saved);
+    }
 
-        [Fact]
-        public void Choose_Layout_Sets_Config_Layout()
+    [Fact]
+    public void Choose_Layout_Sets_Config_Layout()
     {
         var (vm, cfg, _) = MakeVm();
         var cmd = vm.Commands.First(c => c.Id == "choose-layout-TwoLine");
@@ -167,18 +167,18 @@ public class SettingsPaletteViewModelTests
     }
 
     [Fact]
-        public void Toggle_Agent_Flips_And_Saves()
-        {
-            var (vm, cfg, saved) = MakeVm();
-            Assert.True(cfg.Agents.OpenCode);
-            var cmd = vm.Commands.First(c => c.Id == "toggle-agent-opencode");
-            cmd.Execute();
-            Assert.False(cfg.Agents.OpenCode);
-            Assert.Single(saved);
-        }
+    public void Toggle_Agent_Flips_And_Saves()
+    {
+        var (vm, cfg, saved) = MakeVm();
+        Assert.True(cfg.Agents.OpenCode);
+        var cmd = vm.Commands.First(c => c.Id == "toggle-agent-opencode");
+        cmd.Execute();
+        Assert.False(cfg.Agents.OpenCode);
+        Assert.Single(saved);
+    }
 
-        [Fact]
-        public void Set_Interval_Updates_Config()
+    [Fact]
+    public void Set_Interval_Updates_Config()
     {
         var (vm, cfg, _) = MakeVm();
         vm.Commands.First(c => c.Id == "set-interval-5").Execute();

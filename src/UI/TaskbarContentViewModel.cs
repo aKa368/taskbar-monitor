@@ -20,6 +20,7 @@ namespace TaskbarMonitor.UI;
 /// - Wire trực tiếp MetricSampler + UsagePoller (không reflection).
 /// - Chỉ cập nhật text metric/usage; không render chart trong taskbar.
 /// </summary>
+    // v1.0.8 - ponytail: agent text cache (redraw-on-change)
 public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
 {
     private readonly SharedTaskbarTickSource _timer;
@@ -349,25 +350,25 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
                 catch { readers["temperature"] = () => double.NaN; }
 
             if (Config.Metrics.Ram && Config.Metrics.Temperature && Config.Metrics.RamTemperature)
-                        {
-                            var ramTemperature = new RamTemperatureMonitor();
-                            _metricDisposables.Add(ramTemperature);
-                            readers["ramTemperature"] = () =>
-                            {
-                                RamTemperatureReading reading = ramTemperature.Sample();
-                                _ramTemperatureReason = reading.Reason;
-                                return reading.Celsius;
-                            };
-                        }
+            {
+                var ramTemperature = new RamTemperatureMonitor();
+                _metricDisposables.Add(ramTemperature);
+                readers["ramTemperature"] = () =>
+                {
+                    RamTemperatureReading reading = ramTemperature.Sample();
+                    _ramTemperatureReason = reading.Reason;
+                    return reading.Celsius;
+                };
+            }
 
-                        if (Config.Metrics.Clock)
-                        {
-                            // Clock reader: returns current time as HHMM integer (e.g., 1430 for 14:30)
-                            // Computed at sample time; 2.5s pulse is fine for minute display.
-                            readers["clock"] = () => DateTime.Now.Hour * 100 + DateTime.Now.Minute;
-                        }
+            if (Config.Metrics.Clock)
+            {
+                // Clock reader: returns current time as HHMM integer (e.g., 1430 for 14:30)
+                // Computed at sample time; 2.5s pulse is fine for minute display.
+                readers["clock"] = () => DateTime.Now.Hour * 100 + DateTime.Now.Minute;
+            }
 
-                        // GPU thermal libraries often need privileged driver access. This
+            // GPU thermal libraries often need privileged driver access. This
             // user-mode widget intentionally does not load hardware drivers;
             // lack of a trusted sensor is shown as -- C.
 
@@ -633,43 +634,43 @@ public class TaskbarContentViewModel : INotifyPropertyChanged, IDisposable
                     pod.SetAlertState(isRamDanger, isRamWarning);
                     break;
                 case "network":
-                                    value = float.IsFinite(netUp) && float.IsFinite(netDown)
-                                        ? Math.Min(100f, (netUp + netDown) / 10f) : 0;
-                                    text = NetworkRateTextFormatter.FormatPair(netUp, netDown);
-                                    pod.Line1 = float.IsFinite(netUp) ? $"↑ {FormatNetworkRate(netUp)}" : "↑ --";
-                                    pod.Line2 = float.IsFinite(netDown) ? $"↓ {FormatNetworkRate(netDown)}" : "↓ --";
-                                    pod.HasLine2 = true;
-                                    pod.SetAlertState(false, false);
-                                    break;
+                    value = float.IsFinite(netUp) && float.IsFinite(netDown)
+                        ? Math.Min(100f, (netUp + netDown) / 10f) : 0;
+                    text = NetworkRateTextFormatter.FormatPair(netUp, netDown);
+                    pod.Line1 = float.IsFinite(netUp) ? $"↑ {FormatNetworkRate(netUp)}" : "↑ --";
+                    pod.Line2 = float.IsFinite(netDown) ? $"↓ {FormatNetworkRate(netDown)}" : "↓ --";
+                    pod.HasLine2 = true;
+                    pod.SetAlertState(false, false);
+                    break;
                 case "disk":
-                                    value = disk;
-                                    text = float.IsFinite(disk) ? $"DISK {disk:F0}%" : "DISK --";
-                                    pod.Line1 = "DISK";
-                                    pod.Line2 = float.IsFinite(disk) ? $"{disk:F0}%" : "--";
-                                    pod.HasLine2 = true;
-                                    bool isDiskDanger = float.IsFinite(disk) && disk >= 95;
-                                    bool isDiskWarning = float.IsFinite(disk) && disk >= 90;
-                                    pod.SetAlertState(isDiskDanger, isDiskWarning);
-                                    break;
-                                case "clock":
-                                    int clockVal = Config.Metrics.Clock ? (int)ReadMetric("clock") : 0;
-                                    if (clockVal > 0)
-                                    {
-                                        int hour = clockVal / 100;
-                                        int minute = clockVal % 100;
-                                        text = $"{hour:D2}:{minute:D2}";
-                                    }
-                                    else
-                                    {
-                                        text = "--:--";
-                                    }
-                                    pod.Line1 = text;
-                                    pod.Line2 = string.Empty;
-                                    pod.HasLine2 = false;
-                                    pod.ToolTipText = "Local time";
-                                    pod.SetAlertState(false, false);
-                                    break;
-                                default:
+                    value = disk;
+                    text = float.IsFinite(disk) ? $"DISK {disk:F0}%" : "DISK --";
+                    pod.Line1 = "DISK";
+                    pod.Line2 = float.IsFinite(disk) ? $"{disk:F0}%" : "--";
+                    pod.HasLine2 = true;
+                    bool isDiskDanger = float.IsFinite(disk) && disk >= 95;
+                    bool isDiskWarning = float.IsFinite(disk) && disk >= 90;
+                    pod.SetAlertState(isDiskDanger, isDiskWarning);
+                    break;
+                case "clock":
+                    int clockVal = Config.Metrics.Clock ? (int)ReadMetric("clock") : 0;
+                    if (clockVal > 0)
+                    {
+                        int hour = clockVal / 100;
+                        int minute = clockVal % 100;
+                        text = $"{hour:D2}:{minute:D2}";
+                    }
+                    else
+                    {
+                        text = "--:--";
+                    }
+                    pod.Line1 = text;
+                    pod.Line2 = string.Empty;
+                    pod.HasLine2 = false;
+                    pod.ToolTipText = "Local time";
+                    pod.SetAlertState(false, false);
+                    break;
+                default:
                     value = 0;
                     text = pod.Label;
                     pod.Line1 = pod.Label;

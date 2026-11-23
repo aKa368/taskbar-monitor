@@ -95,16 +95,16 @@ public sealed class LayoutManager
             }
 
             if (config.Metrics.GameOverlay && kind != WidgetLayoutKind.Grid)
-                        {
-                            metricPods.Add(new MetricPodViewModel("fps", "FPS") { IsVisible = false });
-                            metricPods.Add(new MetricPodViewModel("ping", "PING") { IsVisible = false });
-                        }
+            {
+                metricPods.Add(new MetricPodViewModel("fps", "FPS") { IsVisible = false });
+                metricPods.Add(new MetricPodViewModel("ping", "PING") { IsVisible = false });
+            }
 
-                        if (config.Metrics.Clock)
-                        {
-                            metricPods.Add(new MetricPodViewModel("clock", "CLK"));
-                        }
-                    }
+            if (config.Metrics.Clock)
+            {
+                metricPods.Add(new MetricPodViewModel("clock", "CLK"));
+            }
+        }
 
         if (def.ShowAgentPods)
         {
